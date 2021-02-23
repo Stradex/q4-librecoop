@@ -17,6 +17,10 @@
 // RAVEN END
 #define SCRIPT_DEFAULTFUNC			"doom_main"
 
+//STRADEX START: DON'T PORT YET
+// class idPlayer; //added for Coop (if crash or something, then we're moving to game_local)
+//STRADEX END
+
 struct gameReturn_t {
 	char		sessionCommand[MAX_STRING_CHARS];	// "map", "disconnect", "victory", etc
 	int			consistencyHash;					// used to check for network game divergence
@@ -25,8 +29,9 @@ struct gameReturn_t {
 	int			stamina;
 	int			combat;
 	bool		syncNextGameFrame;					// used when cinematics are skipped to prevent session from simulating several game frames to
-													// keep the game time in sync with real time
+													// keeGetMapLoadingGUIp the game time in sync with real time
 };
+
 
 enum allowReply_t {
 	ALLOW_YES = 0,
@@ -274,6 +279,12 @@ public:
 
 	// return true to allow download from the built-in http server
 	virtual bool				HTTPRequest( const char *IP, const char *file, bool isGamePak ) = 0;
+
+	//STRADEX START
+	//virtual void				ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, byte* clientInPVS, int numPVSClients) = 0;
+
+	//virtual void				ClientReadSnapshotCoop(int clientNum, int sequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg) = 0;
+	//STRADEX END
 
 // RAVEN BEGIN
 // jscott: for the effects system
