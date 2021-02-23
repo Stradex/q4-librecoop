@@ -699,6 +699,8 @@ class idAnimator{
 // RAVEN END
 	int							AnimLength( int animnum ) const;
 	const idVec3				&TotalMovementDelta( int animnum ) const;
+	bool						GetAllowFrameCommands(int channelNum) const; //added for COOP
+	void						SetAllowFrameCommands(int channelNum, bool allow);
 	
 // RAVEN BEGIN
 // nrausch: get the nearest joint to a segment - ignores joints behind the origin

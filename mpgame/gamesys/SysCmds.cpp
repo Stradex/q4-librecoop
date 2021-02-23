@@ -1122,6 +1122,7 @@ Cmd_Spawn_f
 */
 void Cmd_Spawn_f( const idCmdArgs &args ) {
 #ifndef _MPBETA
+	gameLocal.Printf("cmd_spawn_f\n");
 	const char *key, *value;
 	int			i;
 	float		yaw;
@@ -1130,10 +1131,17 @@ void Cmd_Spawn_f( const idCmdArgs &args ) {
 	idDict		dict;
 
 	player = gameLocal.GetLocalPlayer();
+
+	if (player) {
+		gameLocal.Printf("Player exists!\n");
+	}
+	if (gameLocal.CheatsOk(false)) {
+		gameLocal.Printf("Cheats are enabled!\n");
+	}
+
 	if ( !player || !gameLocal.CheatsOk( false ) ) {
 		return;
 	}
-
 	if ( args.Argc() & 1 ) {	// must always have an even number of arguments
 		gameLocal.Printf( "usage: spawn classname [key/value pairs]\n" );
 		return;

@@ -526,7 +526,10 @@ idEntity::idEntity() {
 // ddynerman: optional preprediction
 	predictTime = 0;
 // RAVEN END
+
+	forceSnapshotUpdateOrigin = true; //coop gay
 }
+
 
 /*
 ================
@@ -3321,6 +3324,7 @@ idEntity::SetOrigin
 */
 void idEntity::SetOrigin( const idVec3 &org ) {
 
+	forceSnapshotUpdateOrigin = true;
 	GetPhysics()->SetOrigin( org );
 
 	UpdateVisuals();
@@ -5125,6 +5129,7 @@ idEntity::Event_Show
 ================
 */
 void idEntity::Event_Show( void ) {
+	forceSnapshotUpdateOrigin = true;
 	Show();
 }
 

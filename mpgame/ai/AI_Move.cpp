@@ -2835,10 +2835,12 @@ void idAI::AnimMove( void ) {
 
 	move.obstacle = NULL;
 	if ( move.moveCommand == MOVE_FACE_ENEMY && enemy.ent ) {
+		turnTowardPos = enemy.lastKnownPosition; //added for COOP
 		TurnToward( enemy.lastKnownPosition );
 		move.goalPos = oldorigin;
 		move.seekPos = oldorigin;
 	} else if ( ( move.moveCommand == MOVE_FACE_ENTITY ) && move.goalEntity.GetEntity() ) {
+		turnTowardPos = move.goalEntity.GetEntity()->GetPhysics()->GetOrigin(); //added for COOP
 		TurnToward( move.goalEntity.GetEntity()->GetPhysics()->GetOrigin() );
 		move.goalPos = oldorigin;
 		move.seekPos = oldorigin;
@@ -2847,12 +2849,13 @@ void idAI::AnimMove( void ) {
 			StopMove( MOVE_STATUS_DONE );
 		} else { 
 			move.moveStatus = MOVE_STATUS_MOVING;
-
 			// Otherwise, Update The Seek Pos
 			if ( !aifl.simpleThink && GetMovePos( move.goalPos, &goalReach ) ) {
 				if ( move.moveCommand != MOVE_WANDER ) {
 					CheckObstacleAvoidance( move.goalPos, move.seekPos, goalReach );
+					turnTowardPos = move.seekPos; //added for COOP
 				} else {
+					turnTowardPos = move.goalPos; //added for COOP
 					move.seekPos = move.goalPos;
 				}
 				DirectionalTurnToward ( move.seekPos );
@@ -4830,3 +4833,139 @@ void idAI::Move	( void ) {
 	}
 }
 
+/**************
+* COOP SPECIFIC
+***************/
+
+
+/*
+=====================
+idAI::CSMove
+=====================
+*/
+void idAI::CSMove(void) {
+	switch (move.moveType) {
+	case MOVETYPE_DEAD:
+		DeadMove();
+		break;
+	case MOVETYPE_FLY:
+		FlyMove();
+		break;
+	case MOVETYPE_STATIC:
+		StaticMove();
+		break;
+	case MOVETYPE_ANIM:
+		CSAnimMove();
+		break;
+	case MOVETYPE_SLIDE:
+		SlideMove();
+		break;
+	case MOVETYPE_PLAYBACK:
+		PlaybackMove();
+		break;
+	case MOVETYPE_CUSTOM:
+		CustomMove();
+		break;
+	}
+}
+
+
+/*
+=======================
+idAI::CSAnimMove
+======================
+*/
+
+void idAI::CSAnimMove(void) {
+
+	idVec3				delta;
+	idVec3				goalDelta;
+	float				goalDist;
+	monsterMoveResult_t	moveResult;
+	idVec3				newDest;
+	// RAVEN BEGIN
+	// cdr: Alternate Routes Bug
+	idReachability* goalReach;
+	// RAVEN END
+
+	idVec3 oldorigin = physicsObj.GetOrigin();
+	idMat3 oldaxis = viewAxis;
+
+	if (move.moveCommand < NUM_NONMOVING_COMMANDS) {
+		move.lastMoveOrigin.Zero();
+		//move.lastMoveTime = gameLocal.time;
+	}
+
+	move.obstacle = NULL;
+	if (move.moveCommand == MOVE_FACE_ENEMY && enemy.ent) {
+		TurnToward(turnTowardPos);
+		move.goalPos = oldorigin;
+		move.seekPos = oldorigin;
+	}
+	else if ((move.moveCommand == MOVE_FACE_ENTITY) && move.goalEntity.GetEntity()) {
+		TurnToward(turnTowardPos);
+		move.goalPos = oldorigin;
+		move.seekPos = oldorigin;
+	}
+	else if (move.moveCommand >= NUM_NONMOVING_COMMANDS) {
+		if (ReachedPos(move.moveDest, move.moveCommand, move.range)) {
+			StopMove(MOVE_STATUS_DONE);
+		}
+		else {
+			move.moveStatus = MOVE_STATUS_MOVING;
+			DirectionalTurnToward(turnTowardPos);
+		}
+	}
+
+	Turn();
+
+	goalDelta = move.seekPos - oldorigin;
+	goalDist = goalDelta.LengthFast();
+
+	// FIXME: this stuff should really move to GetMovePos (Steering)
+	if (move.moveCommand == MOVE_SLIDE_TO_POSITION) {
+		if (gameLocal.time < move.startTime + move.duration) {
+			move.goalPos = move.moveDest - move.moveDir * MS2SEC(move.startTime + move.duration - gameLocal.time);
+			delta = move.goalPos - oldorigin;
+			delta.z = 0.0f;
+		}
+		else {
+			delta = move.moveDest - oldorigin;
+			delta.z = 0.0f;
+			move.fl.allowAnimMove = true;
+			move.fl.allowPrevAnimMove = false;
+			StopMove(MOVE_STATUS_DONE);
+		}
+	}
+	else if (move.fl.allowAnimMove) {
+		GetAnimMoveDelta(oldaxis, viewAxis, delta);
+	}
+	else if (move.fl.allowPrevAnimMove) {
+		GetAnimMoveDelta(oldaxis, viewAxis, delta);
+		float speed = delta.LengthFast();
+		delta = goalDelta;
+		delta.Normalize();
+		delta *= speed;
+	}
+	else {
+		delta.Zero();
+	}
+
+	if (move.moveCommand > NUM_NONMOVING_COMMANDS) {
+		//actually *trying* to move to a goal
+		if (goalDist < delta.LengthFast()) {
+			delta = goalDelta;
+		}
+	}
+
+	physicsObj.SetDelta(delta);
+	physicsObj.ForceDeltaMove(move.fl.noGravity);
+
+	RunPhysics();
+
+
+	moveResult = physicsObj.GetMoveResult();
+	BlockedFailSafe();
+
+	move.fl.onGround = physicsObj.OnGround();
+}

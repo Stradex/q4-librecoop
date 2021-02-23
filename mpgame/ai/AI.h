@@ -17,6 +17,14 @@ AI.h
 	#include "AAS_tactical.h"
 #endif	
 
+//ADDED FOR COOP by Stradex
+typedef enum {
+	NETACTION_NONE,
+	NETACTION_HIDE,
+	NETACTION_SHOW,
+	NETACTION_OVERRIDEANIM
+} netActionType_t;
+
 typedef enum {
 	AITACTICAL_NONE,
 	AITACTICAL_MELEE,					// Rush towards the enemy and perform melee attacks when within range
@@ -434,6 +442,12 @@ friend class idAASFindAttackPosition;
 public:
 	CLASS_PROTOTYPE( idAI );
 
+	enum {
+		EVENT_CLIENTKILL = idEntity::EVENT_MAXEVENTS,
+		EVENT_RESURRECTED,
+		EVENT_MAXEVENTS
+	};
+
 							idAI();
 							~idAI();
 
@@ -547,6 +561,24 @@ public:
 	idEntityPtr<idEntity>	pusher;
 	idEntityPtr<idEntity>	scriptedActionEnt;
 
+	//Added for coop by Stradex
+	int						lastDamageDef;
+	idVec3					lastDamageDir;
+	int						lastDamageLocation;
+	int						currentTorsoAnim;
+	int						currentLegsAnim;
+	netActionType_t			currentNetAction;
+	idStr					currentVoiceSND;
+	idStr					currentDamageSND;
+	bool					haveModelDeath; //FIXME: I only exists to avoid a crash
+	idVec3					turnTowardPos;
+	bool					thereWasEnemy;
+	int						currentChannelOverride;
+	int						currentHeadAnim;
+	int						currentAttackDefNum;
+	int						oldHealth; // To check if an entity was resurrected to inform the client about it (used in conjunction with g_clientsideDamage)
+	bool					allowFastMonsters; // Some entities maybe don't work correctly while using g_fastMonsters
+
 	// script variables
 	struct aiFlags_s {
 		bool		awake					:1;			// set to false until state_wakeup is called.
@@ -624,6 +656,18 @@ public:
 	static bool				PredictTrajectory				( const idVec3 &firePos, const idVec3 &target, float projectileSpeed, const idVec3 &projGravity, const idClipModel *clip, int clipmask, float max_height, const idEntity *ignore, const idEntity *targetEntity, int drawtime, idVec3 &aimDir );
 
 
+	virtual void			ClientPredictionThink(void); //Added for COOP by Stradex
+	virtual void			WriteToSnapshot(idBitMsgDelta& msg) const;  //Added for COOP by Stradex
+	virtual void			ReadFromSnapshot(const idBitMsgDelta& msg);  //Added for COOP by Stradex
+	//virtual bool			ServerReceiveEvent(int event, int time, const idBitMsg& msg); //Added for COOP by Stradex
+	//virtual bool			ClientReceiveEvent(int event, int time, const idBitMsg& msg); //Added for COOP by Stradex
+	void					ClientProcessNetAction(netActionType_t newAction);  //Added for COOP by Stradex
+	idPlayer*				GetClosestPlayerEnemy(void);
+	idPlayer*				GetClosestPlayer(void);
+	idPlayer*				GetFocusPlayer(void); //for coop with characters AI
+
+	void					Init_CoopScriptFix(void); //dirty hack for coop fix
+
 	// special flying code
 	void					AdjustFlyingAngles				( void );
 	void					AddFlyBob						( idVec3 &vel );
@@ -644,6 +688,13 @@ public:
 	void					SetMoveType						( moveType_t moveType );
 	//twhitaker: added custom move type
 	virtual void			CustomMove						( void );
+
+	//client-side movement for Coop
+	void					CSMove(void); //Q4 specific
+	void					CSAnimMove(void);
+	void					CSKilled(void);
+	void					CSResurrected(void); //hack for coop (I don't like this because it is too specific for doom 3 only :( )
+	void					Event_OverrideAnim(int channel); //for netaction
 
 	// movement actions
 	void					KickObstacles					( const idVec3 &dir, float force, idEntity *alwaysKick );

@@ -2504,6 +2504,7 @@ gameReturn_t idGameLocal::ClientPrediction( int clientNum, const usercmd_t *clie
 
 	// run prediction on all entities from the last snapshot
 	for ( ent = snapshotEntities.Next(); ent != NULL; ent = ent->snapshotNode.Next() ) {
+		ent->thinkFlags |= TH_PHYSICS; //COOP stuff tmp
 		// don't force TH_PHYSICS on, only call ClientPredictionThink if thinkFlags != 0
 		// it's better to synchronize TH_PHYSICS on specific entities when needed ( movers may be trouble )
 		if ( ent->thinkFlags != 0 ) {

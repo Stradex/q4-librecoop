@@ -121,20 +121,21 @@ public:
 	int						snapshotSequence;		// last snapshot this entity was in
 	int						snapshotBits;			// number of bits this entity occupied in the last snapshot
 
-	idStr					name;					// name of entity
-	idDict					spawnArgs;				// key/value pairs used to spawn and initialize entity
-	idScriptObject			scriptObject;			// contains all script defined data for this entity
+	idStr					name;						// name of entity
+	idDict					spawnArgs;					// key/value pairs used to spawn and initialize entity
+	idScriptObject			scriptObject;				// contains all script defined data for this entity
 
-	int						thinkFlags;				// TH_? flags
-	int						dormantStart;			// time that the entity was first closed off from player
-	bool					cinematic;				// during cinematics, entity will only think if cinematic is set
+	int						thinkFlags;					// TH_? flags
+	int						dormantStart;				// time that the entity was first closed off from player
+	bool					cinematic;					// during cinematics, entity will only think if cinematic is set
 
-	renderView_t *			renderView;				// for camera views from this entity
-	idEntity *				cameraTarget;			// any remoteRenderMap shaders will use this
+	renderView_t *			renderView;					// for camera views from this entity
+	idEntity *				cameraTarget;				// any remoteRenderMap shaders will use this
 
-	idList< idEntityPtr<idEntity> >	targets;		// when this entity is activated these entities entity are activated
+	idList< idEntityPtr<idEntity> >	targets;			// when this entity is activated these entities entity are activated
 
-	int						health;					// FIXME: do all objects really need health?
+	int						health;						// FIXME: do all objects really need health?
+	bool					forceSnapshotUpdateOrigin;	
 
 // RAVEN BEGIN
 // ddynerman: optional pre-prediction

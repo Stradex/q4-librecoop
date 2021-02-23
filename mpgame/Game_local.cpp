@@ -4760,8 +4760,9 @@ bool idGameLocal::CheatsOk( bool requirePlayer ) {
 		return false;
 	}
 
-	if ( !developer.GetBool() ) {
-		return false;
+	//Stradex edit: so I can spawn entities as server and test coop netcode
+	if ( developer.GetBool() ) {
+		return true;
 	}
 
 	player = GetLocalPlayer();

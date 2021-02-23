@@ -3956,6 +3956,34 @@ void idAnimator::SyncAnimChannels( int channelNum, int fromChannelNum, int curre
 	}
 }
 
+/*
+=====================
+idAnimator::GetAllowFrameCommands
+=====================
+*/
+bool idAnimator::GetAllowFrameCommands(int channelNum) const {
+	if ((channelNum < 0) || (channelNum >= ANIM_NumAnimChannels)) {
+		gameLocal.Error("idAnimator::GetAllowFrameCommands : channel out of range");
+		return false;
+	}
+
+	return channels[channelNum][0].allowFrameCommands;
+}
+
+/*
+=====================
+idAnimator::SetAllowFrameCommands
+=====================
+*/
+void idAnimator::SetAllowFrameCommands(int channelNum, bool allow) {
+	if ((channelNum < 0) || (channelNum >= ANIM_NumAnimChannels)) {
+		gameLocal.Error("idAnimator::GetAllowFrameCommands : channel out of range");
+		return;
+	}
+
+	channels[channelNum][0].allowFrameCommands = allow;
+}
+
 // RAVEN BEGIN
 /*
 =====================
