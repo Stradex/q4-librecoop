@@ -3226,6 +3226,40 @@ idPlayer *idGameLocal::GetLocalPlayer() const {
 
 /*
 ================
+idGameLocal::GetCoopPlayer
+Nothing in the game tic should EVER make a decision based on what the
+local client number is, it shouldn't even be aware that there is a
+draw phase even happening.  This just returns client 0, which will
+be correct for single player.
+================
+*/
+idPlayer* idGameLocal::GetCoopPlayer() const {
+
+	if (isServer) {
+		if (localClientNum < 0 || !entities[localClientNum] || !entities[localClientNum]->IsType(idPlayer::GetClassType())) {
+
+			idPlayer* p = NULL;
+
+			for (int i = 0; i < gameLocal.numClients; i++) {
+				if (entities[i] && entities[i]->IsType(idPlayer::GetClassType())) {
+					p = static_cast<idPlayer*>(entities[i]);
+					if (!p->spectating) {
+						return p;
+					}
+				}
+			}
+			return p; //if we reach this point, then we are sending the data of a spectator player
+		}
+	}
+	else {
+		return GetLocalPlayer();
+	}
+
+	return static_cast<idPlayer*>(entities[localClientNum]);
+}
+
+/*
+================
 idGameLocal::SetupClientPVS
 for client spectating others, get the pvs of spectated
 ================
@@ -4765,7 +4799,7 @@ bool idGameLocal::CheatsOk( bool requirePlayer ) {
 		return true;
 	}
 
-	player = GetLocalPlayer();
+	player = GetCoopPlayer();
 	if ( !requirePlayer || ( player && ( player->health > 0 ) ) ) {
 		return true;
 	}
