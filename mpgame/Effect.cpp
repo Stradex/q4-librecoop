@@ -264,7 +264,12 @@ rvEffect::WriteToSnapshot
 void rvEffect::WriteToSnapshot( idBitMsgDelta &msg ) const {
 	GetPhysics()->WriteToSnapshot( msg );
 	WriteBindToSnapshot( msg );
-	idGameLocal::WriteDecl( msg, effect );
+	if (!gameLocal.mpGame.IsGametypeCoopBased() || !effect->IsImplicit()) {
+		idGameLocal::WriteDecl(msg, effect);
+	}
+	else {
+		msg.WriteLong(-1); //Invalid decl!
+	}
 	msg.WriteBits( loop, 1 );
 }
 
@@ -278,7 +283,17 @@ void rvEffect::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 	GetPhysics()->ReadFromSnapshot( msg );
 	ReadBindFromSnapshot( msg );
 	
-	effect = idGameLocal::ReadDecl( msg, DECL_EFFECT );
+	//effect = idGameLocal::ReadDecl( msg, DECL_EFFECT );
+	int index = msg.ReadLong();
+	if (index != -1) { //Coop fix to avoid crash
+		const idDecl* decl = declManager->DeclByIndex(DECL_EFFECT, index);
+		if (!decl) {
+			gameLocal.Error("ReadDecl: NULL %s decl at index %d", declManager->GetDeclNameFromType(DECL_EFFECT), index);
+		}
+		if (decl->IsImplicit()) {
+			gameLocal.Error("ReadDecl: %s decl %s ( index %d ) is implicit", declManager->GetDeclNameFromType(DECL_EFFECT), decl->GetName(), decl->Index());
+		}
+	} 
 	loop = ( msg.ReadBits( 1 ) != 0 );
 
 	if ( effect && !old ) {

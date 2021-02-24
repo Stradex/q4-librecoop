@@ -929,6 +929,7 @@ public:
 	bool						UpdateTactical_r				( void );
 	virtual int					FilterTactical					( int availableTactical );
 	void						WakeUpTargets					( void );
+	bool						InPlayersPVS					( void );
 
 	virtual aiCTResult_t		CheckTactical					( aiTactical_t tactical );
 
@@ -1405,6 +1406,12 @@ ID_INLINE void idAI::ForceTacticalUpdate ( void ) {
 	delete aasFind;
 	aasFind = NULL;
 }	
+
+//COOP
+
+ID_INLINE bool idAI::InPlayersPVS(void) {
+	return (!gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.InPlayerPVS(this)) || (gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.InCoopPlayersPVS(this));
+}
 
 /*
 ===============================================================================

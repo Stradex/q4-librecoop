@@ -26,7 +26,7 @@ rvAIManager::IsActive
 ================
 */
 bool rvAIManager::IsActive( void ){
-	if( gameLocal.isMultiplayer ){
+	if( gameLocal.isMultiplayer && !gameLocal.mpGame.IsGametypeCoopBased() ){
 		return false;
 	}
 

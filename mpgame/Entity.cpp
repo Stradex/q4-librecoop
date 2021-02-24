@@ -1755,7 +1755,7 @@ rvClientEffect* idEntity::PlayEffect( const idDecl *effect, jointHandle_t joint,
 		return NULL;
 	}
 
-	if ( !gameLocal.isClient && broadcast ) {
+	if ( !gameLocal.isClient && broadcast  && (!gameLocal.mpGame.IsGametypeCoopBased() || !effect->IsImplicit())) {
 		idBitMsg	msg;
 		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
 
@@ -1840,7 +1840,7 @@ rvClientEffect* idEntity::PlayEffect( const idDecl *effect, const idVec3& origin
 	localOrigin = ( origin - renderEntity.origin ) * renderEntity.axis.Transpose();
 	localAxis   = axis * renderEntity.axis.Transpose();
 
-	if ( !gameLocal.isClient && broadcast ) {
+	if ( !gameLocal.isClient && broadcast && (!gameLocal.mpGame.IsGametypeCoopBased() || !effect->IsImplicit())) {
 		idBitMsg	msg;
 		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
 		idCQuat		quat;
@@ -2050,7 +2050,7 @@ bool idEntity::StartSoundShader( const idSoundShader *shader, const s_channelTyp
 		return true;
 	}
 
-	if ( gameLocal.isServer && broadcast ) {
+	if ( gameLocal.isServer && broadcast && (!gameLocal.mpGame.IsGametypeCoopBased() || !shader->IsImplicit())) {
 		idBitMsg	msg;
 		byte		msgBuf[MAX_EVENT_PARAM_SIZE];
 

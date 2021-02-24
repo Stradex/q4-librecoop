@@ -3126,7 +3126,8 @@ idAI::HeardSound
 idEntity *idAI::HeardSound( int ignore_team ){
 	// check if we heard any sounds in the last frame
 	idActor	*actor = gameLocal.GetAlertActor();
-	if ( actor && ( !ignore_team || ( ReactionTo( actor ) & ATTACK_ON_SIGHT ) ) && gameLocal.InPlayerPVS( this ) ) 	{
+
+	if ( actor && ( !ignore_team || ( ReactionTo( actor ) & ATTACK_ON_SIGHT ) ) && InPlayersPVS()) 	{
 		idVec3 pos = actor->GetPhysics()->GetOrigin();
 		idVec3 org = physicsObj.GetOrigin();
 		float dist = ( pos - org ).LengthSqr();
@@ -5637,6 +5638,8 @@ COOP: Behaviour when killed clientside
 */
 void idAI::CSKilled(void) {
 
+	const char* modelDeath;
+
 	// stop all voice sounds 
 	StopSpeaking(true);
 
@@ -5663,6 +5666,41 @@ void idAI::CSKilled(void) {
 
 	Unbind();
 	animator.ClearAllJoints(); //should this happen?
+
+	if (fl.quickBurn) {
+		if (spawnArgs.MatchPrefix("lipsync_death")) {
+			Speak("lipsync_death", true);
+		}
+		else {
+			StartSound("snd_death", SND_CHANNEL_VOICE, 0, false, NULL);
+		}
+		physicsObj.SetLinearVelocity(vec3_zero);
+		physicsObj.PutToRest();
+		physicsObj.DisableImpact();
+	} else {
+		if (StartRagdoll()) {
+			if (spawnArgs.MatchPrefix("lipsync_death")) {
+				Speak("lipsync_death", true);
+			}
+			else {
+				StartSound("snd_death", SND_CHANNEL_VOICE, 0, false, NULL);
+			}
+		}
+		if (spawnArgs.GetString("model_death", "", &modelDeath)) {
+			// lost soul is only case that does not use a ragdoll and has a model_death so get the death sound in here
+			if (spawnArgs.MatchPrefix("lipsync_death")) {
+				Speak("lipsync_death", true);
+			}
+			else {
+				StartSound("snd_death", SND_CHANNEL_VOICE, 0, false, NULL);
+			}
+			renderEntity.shaderParms[SHADERPARM_TIMEOFFSET] = -MS2SEC(gameLocal.time);
+			SetModel(modelDeath);
+			physicsObj.SetLinearVelocity(vec3_zero);
+			physicsObj.PutToRest();
+			physicsObj.DisableImpact();
+		}
+	}
 }
 
 /*
