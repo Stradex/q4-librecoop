@@ -3260,6 +3260,27 @@ idPlayer* idGameLocal::GetCoopPlayer() const {
 
 /*
 ================
+idGameLocal::GetCoopPlayerScriptHack
+================
+*/
+idEntity* idGameLocal::GetCoopPlayerScriptHack() const {
+
+	idEntity* p = NULL;
+	for (int i = 0; i < MAX_CLIENTS; i++) {
+		if (entities[i] && entities[i]->IsType(idPlayer::GetClassType())) {
+			p = entities[i];
+			if (!static_cast<idPlayer*>(entities[i])->spectating) {
+				return p;
+			}
+		}
+	}
+
+	return p;
+}
+
+
+/*
+================
 idGameLocal::SetupClientPVS
 for client spectating others, get the pvs of spectated
 ================

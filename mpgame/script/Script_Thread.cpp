@@ -120,6 +120,13 @@ const idEventDef EV_Thread_EndManualStreaming( "endManualStreaming" );
 const idEventDef EV_Thread_SetMatSort( "setMatSort", "ss", 0 );
 // RAVEN END
 
+//COOP START
+const idEventDef EV_Thread_GetSkill("getSkill", NULL, 'd'); //added for OpenCoop maps support
+const idEventDef EV_Thread_NumPlayers("numPlayers", NULL, 'd'); //added for OpenCoop maps support
+const idEventDef EV_Thread_GetClosestPlayer("getClosestPlayer", "v", 'e'); //added for OpenCoop maps support
+const idEventDef EV_Thread_KillEntities("killEntities", "ss"); //added for OpenCoop maps support
+//COOP END
+
 CLASS_DECLARATION( idClass, idThread )
 	EVENT( EV_Thread_Execute,				idThread::Event_Execute )
 	EVENT( EV_Thread_TerminateThread,		idThread::Event_TerminateThread )
@@ -1175,6 +1182,14 @@ void idThread::Event_Trigger( idEntity *ent ) {
 	if ( ent ) {
 		ent->Signal( SIG_TRIGGER );
 		ent->ProcessEvent( &EV_Activate, gameLocal.GetLocalPlayer() );
+		//little hack for coop
+		ent->calledViaScriptThread = true;
+		if (gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.isServer && !gameLocal.GetLocalPlayer()) {
+			ent->ProcessEvent(&EV_Activate, gameLocal.GetCoopPlayer()); //little hack for coop
+		}
+		else {
+			ent->ProcessEvent(&EV_Activate, gameLocal.GetLocalPlayer());
+		}
 		ent->TriggerGuis();
 	}
 }
@@ -1628,6 +1643,11 @@ void idThread::Event_SetCamera( idEntity *ent ) {
 		return;
 	}
 
+	if (gameLocal.mpGame.IsGametypeCoopBased()) {
+		common->Printf("Avoid cinematics in COOP\n");
+		return;
+	}
+
 // RAVEN BEGIN
 // jnewquist: Use accessor for static class type 
 	if ( !ent->IsType( idCamera::GetClassType() ) ) {
@@ -1773,6 +1793,22 @@ void idThread::Event_FadeIn( idVec3 &color, float time ) {
 	idVec4		fadeColor;
 	idPlayer	*player;
 
+	if (gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.isServer) {
+		idBitMsg	outMsg;
+		byte		msgBuf[MAX_GAME_MESSAGE_SIZE];
+		outMsg.Init(msgBuf, sizeof(msgBuf));
+		outMsg.BeginWriting();
+		outMsg.WriteByte(GAME_RELIABLE_MESSAGE_FADE);
+		outMsg.WriteFloat(color[0]);
+		outMsg.WriteFloat(color[1]);
+		outMsg.WriteFloat(color[2]);
+		outMsg.WriteFloat(0.0f);
+		outMsg.WriteFloat(time);
+		networkSystem->ServerSendReliableMessage(-1, outMsg);
+
+		common->Printf("[COOP] Sending fade...\n");
+	}
+
 	player = gameLocal.GetLocalPlayer();
 	if ( player ) {
 		fadeColor.Set( color[ 0 ], color[ 1 ], color[ 2 ], 0.0f );
@@ -1789,6 +1825,22 @@ void idThread::Event_FadeOut( idVec3 &color, float time ) {
 	idVec4		fadeColor;
 	idPlayer	*player;
 
+	if (gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.isServer) {
+		idBitMsg	outMsg;
+		byte		msgBuf[MAX_GAME_MESSAGE_SIZE];
+		outMsg.Init(msgBuf, sizeof(msgBuf));
+		outMsg.BeginWriting();
+		outMsg.WriteByte(GAME_RELIABLE_MESSAGE_FADE);
+		outMsg.WriteFloat(color[0]);
+		outMsg.WriteFloat(color[1]);
+		outMsg.WriteFloat(color[2]);
+		outMsg.WriteFloat(1.0f);
+		outMsg.WriteFloat(time);
+		networkSystem->ServerSendReliableMessage(-1, outMsg);
+
+		common->Printf("[COOP] Sending fade...\n");
+	}
+
 	player = gameLocal.GetLocalPlayer();
 	if ( player ) {
 		fadeColor.Set( color[ 0 ], color[ 1 ], color[ 2 ], 1.0f );
@@ -1804,6 +1856,22 @@ idThread::Event_FadeTo
 void idThread::Event_FadeTo( idVec3 &color, float alpha, float time ) {
 	idVec4		fadeColor;
 	idPlayer	*player;
+
+	if (gameLocal.mpGame.IsGametypeCoopBased() && gameLocal.isServer) {
+		idBitMsg	outMsg;
+		byte		msgBuf[MAX_GAME_MESSAGE_SIZE];
+		outMsg.Init(msgBuf, sizeof(msgBuf));
+		outMsg.BeginWriting();
+		outMsg.WriteByte(GAME_RELIABLE_MESSAGE_FADE);
+		outMsg.WriteFloat(color[0]);
+		outMsg.WriteFloat(color[1]);
+		outMsg.WriteFloat(color[2]);
+		outMsg.WriteFloat(alpha);
+		outMsg.WriteFloat(time);
+		networkSystem->ServerSendReliableMessage(-1, outMsg);
+
+		common->Printf("[COOP] Sending fade...\n");
+	}
 
 	player = gameLocal.GetLocalPlayer();
 	if ( player ) {
@@ -2307,3 +2375,81 @@ void idThread::Event_EndManualStreaming()
 {
 }
 // RAVEN END
+
+/*
+================
+idThread::Event_GetSkill
+================
+*/
+void idThread::Event_GetSkill(void)
+{
+	int gSkill = gameLocal.isMultiplayer ? gameLocal.serverInfo.GetInt("g_skill") : g_skill.GetInteger();
+
+	idThread::ReturnInt(gSkill);
+
+}
+
+/*
+================
+idThread::Event_NumPlayers
+================
+*/
+
+void idThread::Event_NumPlayers(void)
+{
+	int playersPlaying = 0;
+	for (int i = 0; i < gameLocal.numClients; i++) {
+		idPlayer* client = gameLocal.GetClientByNum(i);
+
+		if (!client || client->spectating) {
+			continue;
+		}
+
+		playersPlaying++;
+	}
+
+	idThread::ReturnInt(playersPlaying);
+}
+
+/*
+================
+idThread::Event_GetClosestPlayer
+================
+*/
+
+void idThread::Event_GetClosestPlayer(const idVec3& pos)
+{
+	idPlayer* closestPlayer = NULL;
+	float shortestDist = idMath::INFINITY;
+	idPlayer* player;
+	float dist;
+	idVec3	delta;
+	for (int i = 0; i < gameLocal.numClients; i++) {
+		player = gameLocal.GetClientByNum(i);
+
+		if (!player || player->spectating || player->health <= 0) {
+			continue;
+		}
+
+		delta = pos - player->GetPhysics()->GetOrigin();
+		dist = delta.LengthSqr();
+
+		if (dist < shortestDist) {
+			shortestDist = dist;
+			closestPlayer = player;
+		}
+	}
+
+	idThread::ReturnEntity(closestPlayer);
+}
+
+/*
+================
+idThread::Event_GetClosestPlayer
+================
+*/
+
+void idThread::Event_KillEntities(const char* key, const char* value)
+{
+	//EMPTY BY NOW. FIXME Stradex
+}

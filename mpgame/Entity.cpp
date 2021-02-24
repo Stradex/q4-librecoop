@@ -527,7 +527,10 @@ idEntity::idEntity() {
 	predictTime = 0;
 // RAVEN END
 
-	forceSnapshotUpdateOrigin = true; //coop gay
+	//COOP START
+	forceSnapshotUpdateOrigin = true;
+	calledViaScriptThread = false;
+	//COOP END
 }
 
 

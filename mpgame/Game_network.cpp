@@ -2396,6 +2396,26 @@ void idGameLocal::ClientProcessReliableMessage( int clientNum, const idBitMsg &m
 			}
 			break;
 		}
+		case GAME_RELIABLE_MESSAGE_FADE: {
+			idVec4		fadeColor;
+			idPlayer* player;
+			idVec3		color;
+			float		alpha, fadeTime;
+			color[0] = msg.ReadFloat();
+			color[1] = msg.ReadFloat();
+			color[2] = msg.ReadFloat();
+			alpha = msg.ReadFloat();
+			fadeTime = msg.ReadFloat();
+
+			player = GetLocalPlayer();
+			if (player) {
+				fadeColor.Set(color[0], color[1], color[2], alpha);
+				player->playerView.Fade(fadeColor, SEC2MS(fadeTime));
+			}
+
+			common->Printf("[COOP] Receive fade...\n");
+			break;
+		}
 		default: {
 			Error( "Unknown server->client reliable message: %d", id );
 			break;

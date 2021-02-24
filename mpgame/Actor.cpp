@@ -1778,6 +1778,8 @@ bool idActor::StartRagdoll( void ) {
 	af.GetPhysics()->SetContactFrictionDent( contactFrictionDent, contactFrictionDentStart, contactFrictionDentEnd );
 
 	// drop any items the actor is holding
+
+
 	idList<idEntity *> list;
 	idMoveableItem::DropItems( this, "death", &list );
 	for ( int i = 0; i < list.Num(); i++ ) {

@@ -54,6 +54,12 @@ extern const idEventDef EV_Thread_SetSpecialEffect;
 extern const idEventDef EV_Thread_SetSpecialEffectParm;
 // RAVEN END
 
+//COOP START
+extern const idEventDef EV_Thread_GetSkill;
+extern const idEventDef EV_Thread_GetClosestPlayer;
+extern const idEventDef EV_Thread_KillEntities;
+//COOP END
+
 class idThread : public idClass {
 private:
 	static idThread				*currentThread;
@@ -163,6 +169,10 @@ private:
 	void						Event_DebugBounds( const idVec3 &color, const idVec3 &mins, const idVec3 &maxs, const float lifetime );
 	void						Event_DrawText( const char *text, const idVec3 &origin, float scale, const idVec3 &color, const int align, const float lifetime );
 	void						Event_InfluenceActive( void );
+	void						Event_GetSkill(void); //added for OpenCoop maps support
+	void						Event_NumPlayers(void); //added for OpenCoop maps support
+	void						Event_GetClosestPlayer(const idVec3& pos); //added for OpenCoop maps support
+	void						Event_KillEntities(const char* key, const char* value); //added for OpenCoop maps support
 
 // RAVEN BEGIN
 // kfuller: added

@@ -286,7 +286,8 @@ enum {
 	GAME_RELIABLE_MESSAGE_ADDCHECKPOINT,
 	GAME_RELIABLE_MESSAGE_GOTOCHECKPOINT,
 	GAME_RELIABLE_MESSAGE_GLOBALCHECKPOINT,
-	GAME_RELIABLE_MESSAGE_NOCLIP
+	GAME_RELIABLE_MESSAGE_NOCLIP,
+	GAME_RELIABLE_MESSAGE_FADE //For fadeTo, fadeIn, fadeOut FX in coop
 };
 
 enum {
@@ -831,8 +832,8 @@ public:
 	int						GetClientNumByName( const char *name ) const;
 
 	idPlayer *				GetLocalPlayer() const;
-
 	idPlayer*				GetCoopPlayer() const;
+	idEntity*				GetCoopPlayerScriptHack() const; //added for Coop
 	
 // RAVEN BEGIN
 // jshepard: update player data after main menu close

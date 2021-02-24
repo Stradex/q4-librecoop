@@ -378,6 +378,12 @@ public:
 // RAVEN END
 	void						Event_Remove( void );
 
+	//Client-side functions called in Coop
+	bool						CS_PostEventMS(const idEventDef* ev, int time);
+	bool						CS_PostEventMS(const idEventDef* ev, int time, idEventArg arg1);
+	bool						CS_PostEventSec(const idEventDef* ev, float time);
+	bool						CS_PostEventSec(const idEventDef* ev, float time, idEventArg arg1);
+
 	// Static functions
 	static void					Init( void );
 	static void					Shutdown( void );
@@ -402,6 +408,9 @@ private:
 
 	bool						PostEventArgs( const idEventDef *ev, int time, int numargs, ... );
 	bool						ProcessEventArgs( const idEventDef *ev, int numargs, ... );
+
+	//Client-side functions called in Coop
+	bool						CS_PostEventArgs(const idEventDef* ev, int time, int numargs, ...);
 
 	void						Event_SafeRemove( void );
 

@@ -679,7 +679,11 @@ idClipModel::Link
 // ddynerman: multiple clip worlds
 void idClipModel::Link( void ) {
 
-	assert( idClipModel::entity );
+
+	if (!gameLocal.mpGame.IsGametypeCoopBased()) { //avoid very strange and uncommon crash in coop
+		assert(idClipModel::entity);
+	}
+
 	if ( !idClipModel::entity ) {
 		return;
 	}
@@ -1346,7 +1350,10 @@ idClip::TestHugeTranslation
 */
 ID_INLINE bool TestHugeTranslation( trace_t &results, const idClipModel *mdl, const idVec3 &start, const idVec3 &end, const idMat3 &trmAxis ) {
 	if ( mdl != NULL && ( end - start ).LengthSqr() > Square( CM_MAX_TRACE_DIST ) ) {
-		assert( 0 );
+		if (!gameLocal.mpGame.IsGametypeCoopBased()) { //Avoid crash for clients in coop (and in rare cases for server), ROE did the same in CTF so...
+			assert(0);
+		}
+
 
 		results.fraction = 0.0f;
 		results.endpos = start;
@@ -1611,6 +1618,11 @@ bool idClip::Motion( trace_t &results, const idVec3 &start, const idVec3 &end, c
 	trace_t translationalTrace, rotationalTrace, trace;
 	idRotation endRotation;
 	const idTraceModel *trm;
+
+	if (gameLocal.mpGame.IsGametypeCoopBased() && (rotation.GetOrigin() != start)) {
+		common->Printf("[COOP FATAL] assert( rotation.GetOrigin() == start ) at idClip::Motion\n");
+		return true; //should return true or false?
+	}
 
 	assert( rotation.GetOrigin() == start );
 
