@@ -684,7 +684,22 @@ void Cmd_Noclip_f( const idCmdArgs &args ) {
 	} else {
 		msg = "noclip ON\n";
 	}
-	player->noclip = !player->noclip;
+
+	if (gameLocal.isMultiplayer) {
+		if (gameLocal.isClient) {
+			idBitMsg	outMsg;
+			byte		msgBuf[MAX_GAME_MESSAGE_SIZE];
+			outMsg.Init(msgBuf, sizeof(msgBuf));
+			outMsg.WriteByte(GAME_RELIABLE_MESSAGE_NOCLIP);
+			networkSystem->ClientSendReliableMessage(outMsg);
+		}
+		else {
+			player->noclip = !player->noclip;
+		}
+	}
+	else {
+		player->noclip = !player->noclip;
+	}
 
 	gameLocal.Printf( "%s", msg );
 }
@@ -3052,6 +3067,87 @@ void Cmd_ListMaps_f( const idCmdArgs& args ) {
 	gameLocal.mpGame.ListMaps();
 }
 
+//COOP Specific
+
+/*
+===============
+Cmd_Checkpoint_f
+This is only used for test in coop, probably going to be deleted or declared as cheat only in the final release
+===============
+*/
+void Cmd_Checkpoint_f(const idCmdArgs& args) {
+	const char* name;
+	idPlayer* player;
+	int			commandType = COOP_CMD_ADDCHECKPOINT;
+	if (args.Argc() == 1) {
+		common->Printf("usage: <go> create a current checkpoint, <add> save current, <global> save for all players\n");
+		return;
+	}
+
+	player = gameLocal.GetLocalPlayer();
+	if (!player || player->spectating) { // !gameLocal.CheatsOk()
+		return;
+	}
+
+	name = args.Argv(1);
+
+	if (idStr::Icmp(name, "go") == 0) {
+		commandType = COOP_CMD_GOTOCHECKPOINT;
+	}
+	else if (idStr::Icmp(name, "global") == 0) {
+		commandType = COOP_CMD_GLOBALCHECKPOINT;
+	}
+
+	if (commandType == COOP_CMD_GLOBALCHECKPOINT && !gameLocal.CheatsOk()) {
+		common->Printf("checkpoint global works only with net_allowcheats 1\n");
+		return;
+	}
+
+	if (gameLocal.isMultiplayer) {
+		if (gameLocal.isClient) { //Client
+			idBitMsg	outMsg;
+			byte		msgBuf[MAX_GAME_MESSAGE_SIZE];
+			outMsg.Init(msgBuf, sizeof(msgBuf));
+
+			switch (commandType) {
+			case COOP_CMD_ADDCHECKPOINT:
+				outMsg.WriteByte(GAME_RELIABLE_MESSAGE_ADDCHECKPOINT);
+				break;
+			case COOP_CMD_GOTOCHECKPOINT:
+				//little hack while using net_clientsideMovement 1
+				outMsg.WriteByte(GAME_RELIABLE_MESSAGE_GOTOCHECKPOINT);
+				break;
+			case COOP_CMD_GLOBALCHECKPOINT:
+			default:
+				outMsg.WriteByte(GAME_RELIABLE_MESSAGE_GLOBALCHECKPOINT);
+				break;
+			}
+
+
+			networkSystem->ClientSendReliableMessage(outMsg);
+		}
+		else { //server
+			if (gameLocal.localClientNum < 0) {
+				return; //dedicated server
+			}
+			switch (commandType) {
+			case COOP_CMD_ADDCHECKPOINT:
+				gameLocal.mpGame.WantAddCheckpoint(gameLocal.localClientNum);
+				break;
+			case COOP_CMD_GOTOCHECKPOINT:
+				gameLocal.mpGame.WantUseCheckpoint(gameLocal.localClientNum);
+				break;
+			case COOP_CMD_GLOBALCHECKPOINT:
+				gameLocal.mpGame.WantAddCheckpoint(gameLocal.localClientNum, true);
+				break;
+			}
+		}
+	}
+
+
+}
+
+
 /*
 =================
 idGameLocal::InitConsoleCommands
@@ -3247,6 +3343,9 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "buyMenu",				Cmd_ToggleBuyMenu_f,		CMD_FL_GAME,				"Toggle buy menu (if in a buy zone and the game type supports it)" );
 	cmdSystem->AddCommand( "buy",					Cmd_BuyItem_f,				CMD_FL_GAME,				"Buy an item (if in a buy zone and the game type supports it)" );
 // RITUAL END
+
+	//added for Coop specific
+	cmdSystem->AddCommand("checkpoint",				Cmd_Checkpoint_f,			CMD_FL_GAME,				"Checkpoints for coop");
 
 }
 

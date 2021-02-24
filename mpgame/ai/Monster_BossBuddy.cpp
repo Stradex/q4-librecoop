@@ -369,6 +369,11 @@ bool rvMonsterBossBuddy::PerformAction( rvAIAction* action, bool (idAI::*conditi
 void rvMonsterBossBuddy::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &dir, 
 								const char *damageDefName, const float damageScale, const int location ) 
 {
+
+	if (gameLocal.isClient && gameLocal.mpGame.IsGametypeCoopBased()) { //Disallow clientside damage in coop by now.
+		return;
+	}
+
 	// get damage amount so we can decay the shields and check for ignoreShields
 	const idDict *damageDef = gameLocal.FindEntityDefDict( damageDefName, false );
 	if ( !damageDef ) 

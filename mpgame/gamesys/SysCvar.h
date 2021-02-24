@@ -425,5 +425,6 @@ extern idCVar pm_powerslide;
 extern idCVar g_playerLean;
 
 extern idCVar net_clientPredictWeaponSwitch;
+extern idCVar	si_lives; //survival lives
 
 #endif /* !__SYS_CVAR_H__ */

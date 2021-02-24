@@ -2382,6 +2382,10 @@ void idActor::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &dir
 		return;
 	}
 
+	if (gameLocal.isClient && gameLocal.mpGame.IsGametypeCoopBased()) { //Disallow clientside damage in coop by now.
+		return;
+	}
+
 	if ( !inflictor ) {
 		inflictor = gameLocal.world;
 	}

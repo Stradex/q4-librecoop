@@ -20,7 +20,7 @@ All game cvars should be defined here.
 // ddynerman: our gameplay modes
 // RITUAL BEGIN
 // squirrel: added DeadZone multiplayer mode
-const char *si_gameTypeArgs[]		= { "singleplayer", "DM", "Tourney", "Team DM", "CTF", "Arena CTF", "DeadZone", NULL };
+const char *si_gameTypeArgs[]		= { "singleplayer", "DM", "Tourney", "Team DM", "CTF", "Arena CTF", "DeadZone", "Coop", "Survival", NULL };
 const int si_numGameTypeArgs = sizeof( si_gameTypeArgs ) / sizeof( si_gameTypeArgs[0] );
 // RITUAL END
 // RAVEN END
@@ -55,7 +55,7 @@ idCVar si_dropWeaponsInBuyingModes(	"si_dropWeaponsInBuyingModes",	"0",		CVAR_GA
 // RITUAL END
 // RAVEN BEGIN
 // ddynerman: new gametype strings
-idCVar si_gameType(					"si_gameType",				si_gameTypeArgs[ 0 ],	CVAR_GAME | CVAR_SERVERINFO | PC_CVAR_ARCHIVE, "game type - singleplayer, DM, Tourney, Team DM, CTF, Arena CTF, or DeadZone", si_gameTypeArgs, idCmdSystem::ArgCompletion_String<si_gameTypeArgs> );
+idCVar si_gameType(					"si_gameType",				si_gameTypeArgs[ 0 ],	CVAR_GAME | CVAR_SERVERINFO | PC_CVAR_ARCHIVE, "game type - singleplayer, DM, Tourney, Team DM, CTF, Arena CTF, DeadZone, Coop or Survival", si_gameTypeArgs, idCmdSystem::ArgCompletion_String<si_gameTypeArgs> );
 idCVar si_map(						"si_map",					"mp/q4dm1",				CVAR_GAME | CVAR_SERVERINFO | PC_CVAR_ARCHIVE, "map to be played next on server", idCmdSystem::ArgCompletion_MapName );
 idCVar si_mapCycle(					"si_mapCycle",				"",						CVAR_GAME | CVAR_SERVERINFO | PC_CVAR_ARCHIVE, "map cycle list semicolon delimited" );
 // bdube: raise player limit
@@ -633,6 +633,10 @@ idCVar net_serverDlBaseURL(					"net_serverDlBaseURL",				"",				CVAR_GAME | CVA
 idCVar net_serverDlTable(					"net_serverDlTable",				"",				CVAR_GAME | CVAR_ARCHIVE, "pak names for which download is provided, seperated by ; - use a * to mark all paks" );
 
 idCVar si_serverURL(						"si_serverURL",						"",				CVAR_GAME | CVAR_SERVERINFO | CVAR_ARCHIVE, "server information page" );
+
+//COOP START
+idCVar si_lives(							"si_lives",							"2",			CVAR_GAME | CVAR_ARCHIVE | CVAR_INTEGER, "How many lives can the players have in Survival mode", 1, 100);
+//COOP END
 
 idCVar g_repeaterReliableOnly(				"g_repeaterReliableOnly",			"1",			CVAR_GAME | CVAR_INTEGER | CVAR_ARCHIVE, "send unreliable messages reliably. 1: to repeaters 2: to repeaters and viewers" );
 

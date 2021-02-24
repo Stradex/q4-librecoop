@@ -7,8 +7,9 @@
 #pragma hdrstop
 
 #include "Game_local.h"
+#include "Target.h"
 
-idCVar g_spectatorChat( "g_spectatorChat", "0", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "let spectators talk to everyone during game" );
+idCVar g_spectatorChat( "g_spectatorChat", "1", CVAR_GAME | CVAR_ARCHIVE | CVAR_BOOL, "let spectators talk to everyone during game" );
 
 const char *idMultiplayerGame::MPGuis[] = {
 // RAVEN BEGIN
@@ -314,6 +315,7 @@ void idMultiplayerGame::SpawnPlayer( int clientNum ) {
 	TIME_THIS_SCOPE( __FUNCLINE__);
 
 	idPlayer *p = static_cast< idPlayer * >( gameLocal.entities[ clientNum ] );
+	mpGameState_t state = gameState->GetMPGameState();
 
 	if ( !p->IsFakeClient() ) {
 		bool ingame = playerState[ clientNum ].ingame;
@@ -325,7 +327,27 @@ void idMultiplayerGame::SpawnPlayer( int clientNum ) {
 			//if ( gameLocal.IsTeamGame() ) {
 			//	SwitchToTeam( clientNum, -1, p->team );
 			//}
+
+			if (IsGametypeCoopBased()) {
+				//SwitchToTeam( clientNum, -1, 0 ); //Always team 0 in Coop
+				p->team = 0;//Always team 0 in Coop
+				if (gameLocal.gameType == GAME_SURVIVAL) {
+					if (state <= COUNTDOWN) {
+						playerState[clientNum].livesLeft = si_lives.GetInteger(); //added for Survival
+					}
+					else {
+						playerState[clientNum].livesLeft = 0; //Don't allow players to join in middle of a game
+					}
+				}
+
+			}
 			playerState[ clientNum ].ingame = ingame;
+
+			//added for coop
+			if (IsGametypeCoopBased() && !playerUseCheckpoints[clientNum]) {
+				playerCheckpoints[clientNum] = p->GetLocalCoordinates(p->GetPhysics()->GetOrigin()); //get spawn position as initial checkpoint
+				common->Printf("Saving player %d checkpoint\n", clientNum);
+			}
 		}
 	}
 
@@ -1600,7 +1622,9 @@ idMultiplayerGame::EnoughClientsToPlay
 bool idMultiplayerGame::EnoughClientsToPlay() {
 	int team[ 2 ];
 	int clients = NumActualClients( false, &team[ 0 ] );
-	if ( gameLocal.IsTeamGame() ) {
+	if (IsGametypeCoopBased()) {
+		return clients >= 1;
+	} else if ( gameLocal.IsTeamGame() ) {
 		return clients >= 2 && team[ 0 ] && team[ 1 ];
 	} else {
 		return clients >= 2;
@@ -1623,6 +1647,11 @@ bool idMultiplayerGame::AllPlayersReady( idStr* reason ) {
 	
 	minClients = Max( 2, gameLocal.serverInfo.GetInt( "si_minPlayers" ) );
 	numClients = NumActualClients( false, &team[ 0 ] );
+
+	if (gameLocal.mpGame.IsGametypeCoopBased() && numClients > 0) {
+		return true;
+	}
+
 	if ( numClients < minClients ) { 
 		if( reason ) {
 			// stupid english plurals
@@ -1696,6 +1725,10 @@ idPlayer *idMultiplayerGame::FragLimitHit() {
 	int fragLimit = gameLocal.serverInfo.GetInt( "si_fragLimit" );
 	idPlayer *leader = NULL;
 
+	if (gameLocal.mpGame.IsGametypeCoopBased()) {
+		return NULL;
+	}
+
  	if ( fragLimit <= 0 ) {
  		return NULL; // fraglimit disabled
 	}
@@ -1719,6 +1752,11 @@ idMultiplayerGame::TimeLimitHit
 */
 bool idMultiplayerGame::TimeLimitHit( void ) {	
 	int timeLimit = gameLocal.serverInfo.GetInt( "si_timeLimit" );
+
+	if (gameLocal.mpGame.IsGametypeCoopBased()) {
+		return false;
+	}
+
 	if ( timeLimit ) {
 		if ( gameLocal.time >= matchStartedTime + timeLimit * 60000 ) {
 			return true;
@@ -1793,8 +1831,17 @@ void idMultiplayerGame::PlayerDeath( idPlayer *dead, idPlayer *killer, int metho
 	// don't do PrintMessageEvent
 	assert( !gameLocal.isClient );
 
+
+	if (gameLocal.gameType == GAME_SURVIVAL) {
+		playerState[dead->entityNumber].livesLeft -= 1; //added for survival
+		common->Printf("[SURVIVAL] Player %d have %d lives left...\n", dead->entityNumber, playerState[dead->entityNumber].livesLeft);
+	}
+
+
 	if ( killer ) {
-		if ( gameLocal.IsTeamGame() ) {
+		if (IsGametypeCoopBased()) {
+			AddPlayerScore(killer, -1);
+		} else	if ( gameLocal.IsTeamGame() ) {
 			if ( killer == dead || killer->team == dead->team ) {
 				// suicide or teamkill
 
@@ -1917,9 +1964,15 @@ we assume that they are still legit when reaching here
 */
 void idMultiplayerGame::ExecuteVote( void ) {
 	bool needRestart;
+	int j;
 	ClearVote();
 	switch ( vote ) {
 		case VOTE_RESTART:
+			if (gameLocal.gameType == GAME_SURVIVAL) {
+				for (j = 0; j < MAX_CLIENTS; j++) {
+					playerState[j].livesLeft = si_lives.GetInteger();
+				}
+			}
 			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "serverMapRestart\n");
 			break;
 		case VOTE_TIMELIMIT:
@@ -1946,6 +1999,14 @@ void idMultiplayerGame::ExecuteVote( void ) {
 			cmdSystem->BufferCommandText( CMD_EXEC_NOW, va( "kick %s", voteValue.c_str() ) );
 			break;
 		case VOTE_MAP:
+			if (gameLocal.gameType == GAME_SURVIVAL) {
+				for (j = 0; j < MAX_CLIENTS; j++) {
+					playerState[j].fragCount = 0;
+					playerState[j].teamFragCount = 0;
+					playerState[j].livesLeft = si_lives.GetInteger();
+				}
+			}
+
 			cvarSystem->SetCVarString( "si_map", voteValue );
 			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "serverMapRestart\n");
 			break;
@@ -1974,7 +2035,40 @@ void idMultiplayerGame::ExecuteVote( void ) {
 			gameLocal.sessionCommand = "nextMap";
 			break;
 		case VOTE_NEXTMAP:
-			cmdSystem->BufferCommandText( CMD_EXEC_APPEND, "serverNextMap\n" );
+			if (gameLocal.mpGame.IsGametypeCoopBased()) {
+
+				if (gameLocal.gameType == GAME_SURVIVAL) {
+					for (j = 0; j < MAX_CLIENTS; j++) {
+						playerState[j].fragCount = 0;
+						playerState[j].teamFragCount = 0;
+						playerState[j].livesLeft = si_lives.GetInteger();
+					}
+				}
+
+				idEntity* ent;
+				idStr nextMap = "";
+				for (int i = 0; i < gameLocal.num_entities; i++) {
+					ent = gameLocal.entities[i];
+					if (ent && ent->IsType(idTarget_EndLevel::GetClassType())) {
+						nextMap = ent->spawnArgs.GetString("nextMap", "");
+					}
+				}
+
+				//SavePersistentPlayersInfo(); //saving player info in Coop for the next map
+
+				if (nextMap != "") {
+					gameLocal.Printf("Loading next map ", nextMap);
+					si_map.SetString(nextMap);
+					gameLocal.MapRestart();
+				}
+				else {
+					gameLocal.Warning("Failed to find next map from target_endLevel");
+					cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "serverNextMap\n");
+				}
+			}
+			else {
+				cmdSystem->BufferCommandText(CMD_EXEC_APPEND, "serverNextMap\n");
+			}
 			break;
 	}
 }
@@ -5596,6 +5690,8 @@ void idMultiplayerGame::WriteToSnapshot( idBitMsgDelta &msg ) const {
 			msg.WriteLong( playerState[i].deadZoneScore );
 			value = idMath::ClampInt( 0, MP_PLAYER_MAXWINS, playerState[i].wins );
 			msg.WriteBits( value, ASYNC_PLAYER_WINS_BITS );
+			value = idMath::ClampInt(0, MP_PLAYER_MAXLIVES, playerState[i].livesLeft); //new for survival
+			msg.WriteBits(value, ASYNC_PLAYER_LIVES_BITS); //new for survival
 			// only transmit instance info in tourney
 			if( gameLocal.gameType == GAME_TOURNEY ) {
 				if( !ent ) {
@@ -5657,6 +5753,7 @@ void idMultiplayerGame::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 			playerState[ i ].teamFragCount = msg.ReadBits( ASYNC_PLAYER_FRAG_BITS );
 			playerState[ i ].deadZoneScore = msg.ReadLong();
 			playerState[ i ].wins = msg.ReadBits( ASYNC_PLAYER_WINS_BITS );
+			playerState[ i ].livesLeft = msg.ReadBits(ASYNC_PLAYER_LIVES_BITS); //added for survival
 			if( gameLocal.gameType == GAME_TOURNEY ) {
 				if( msg.ReadBits( 1 ) ) {
 					newInstance = msg.ReadBits( ASYNC_PLAYER_INSTANCE_BITS );
@@ -5855,11 +5952,31 @@ void idMultiplayerGame::CheckRespawns( idPlayer *spectator ) {
 					p->ServerSpectate( true );
 					CheckAbortGame();
 				}
-			} else {
+			} else if (gameLocal.gameType == GAME_SURVIVAL) {
+				//Survival specific code
+
+				if (gameState->GetMPGameState() == WARMUP || gameState->GetMPGameState() == COUNTDOWN) {
+					p->ServerSpectate(false);
+				}
+				else if (gameState->GetMPGameState() == GAMEON || gameState->GetMPGameState() == SUDDENDEATH) { //FIXME: SUDDENDEATH IN SURVIVAL?
+					if (playerState[i].livesLeft <= 0) { //this player is out of lives
+						//common->Printf("[SURVIVAL] player %d is out of lives...\n", i);
+						p->ServerSpectate(true);
+						//p->inventory.CoopClear();
+						gameLocal.persistentPlayerInfo[p->entityNumber].Clear();
+						p->SavePersistantInfo();
+						common->Printf("Clearing inventory for player who died!");
+						CheckAbortGame(); //may all players are dead so restart the map is important
+					}
+					else {
+						p->ServerSpectate(false);
+					}
+				}
+			}else {
 				if ( gameState->GetMPGameState() == WARMUP || gameState->GetMPGameState() == COUNTDOWN || gameState->GetMPGameState() == GAMEON ) {
 					if ( gameLocal.gameType != GAME_TOURNEY ) {
 						// wait for team to be set before spawning in
-						if( !gameLocal.IsTeamGame() || p->team != -1 ) {
+						if(gameLocal.gameType == GAME_COOP || !gameLocal.IsTeamGame() || p->team != -1 ) {
 							p->ServerSpectate( false );
 						}
 
@@ -5881,6 +5998,7 @@ void idMultiplayerGame::CheckRespawns( idPlayer *spectator ) {
 			}
 		} else if ( p->wantSpectate && !p->spectating ) {
 			playerState[ i ].fragCount = 0; // whenever you willingly go spectate during game, your score resets
+			playerState[ i ].livesLeft = 0; //SURVIVAL: If a player spectate in midle of the game, then loses all his lives
 			p->ServerSpectate( true );
 			CheckAbortGame();
 		}
@@ -6812,6 +6930,17 @@ void idMultiplayerGame::DisconnectClient( int clientNum ) {
 
 	// update serverinfo
 	UpdatePrivatePlayerCount();
+
+	if (gameLocal.mpGame.IsGametypeCoopBased()) {
+		gameLocal.persistentPlayerInfo[clientNum].Clear(); //clear persistentInfo for this player
+		if (gameLocal.gameType == GAME_SURVIVAL) {
+			if (gameState->GetMPGameState() == WARMUP || gameState->GetMPGameState() == COUNTDOWN) {
+				playerState[clientNum].livesLeft = si_lives.GetInteger();
+			} else {
+				playerState[clientNum].livesLeft = 0;
+			}
+		}
+	}
 }
 
 /*
@@ -6830,6 +6959,48 @@ void idMultiplayerGame::CheckAbortGame( void ) {
 	if( gameLocal.gameType == GAME_TOURNEY ) {
 		if ( !EnoughClientsToPlay() ) {
 			gameState->NewState( WARMUP );
+		}
+	}
+	else if (gameLocal.gameType == GAME_SURVIVAL) {
+		int i, j, s;
+		for (j = 0, s = 0; j < gameLocal.numClients; j++) {
+			if (!gameLocal.entities[j]) {
+				s++;
+				continue;
+			}
+			if (!CanPlay(static_cast<idPlayer*>(gameLocal.entities[j]))) {
+				s++;
+				continue;
+			}
+			if (playerState[j].livesLeft > 0) {
+				break;
+			}
+		}
+		if (s == gameLocal.numClients) {
+			//Everyone is, probably, spectating so don't restart anything
+			return;
+		}
+		if (j == gameLocal.numClients) {
+			//Reset inventory to avoid bug related to g_keepItemsAfterRespawn 1
+			for (i = 0; i < gameLocal.numClients; i++) {
+				idEntity* ent = gameLocal.entities[i];
+				if (!ent || !ent->IsType(idPlayer::GetClassType())) {
+					continue;
+				}
+				idPlayer* p = static_cast<idPlayer*>(ent);
+				//p->inventory.CoopClear();
+				gameLocal.persistentPlayerInfo[i].Clear();
+				p->SavePersistantInfo();
+				common->Printf("Clearing inventory for players!");
+			}
+
+			for (j = 0; j < MAX_CLIENTS; j++) {
+				playerState[j].fragCount = 0;
+				playerState[j].teamFragCount = 0;
+				playerState[j].livesLeft = si_lives.GetInteger();
+			}
+			//Everyone is dead so restart the map
+			gameState->NewState(GAMEREVIEW);
 		}
 	} else {
 		if ( !EnoughClientsToPlay() && TimeLimitHit() ) {
@@ -6944,7 +7115,9 @@ void idMultiplayerGame::MapRestart( void ) {
 			// mekberg: clear wins only on map restart
 			idPlayer *player = static_cast<idPlayer *>( gameLocal.entities[ clientNum ] );
 			SetPlayerWin( player, 0 );
-			
+			if (gameLocal.gameType == GAME_SURVIVAL) {
+				playerState[clientNum].livesLeft = si_lives.GetInteger(); //added for Survival
+			}
 			/*if( clientNum == gameLocal.localClientNum ) {
 				if ( player->alreadyDidTeamAnnouncerSound ) {
 					player->alreadyDidTeamAnnouncerSound = false;
@@ -7773,7 +7946,11 @@ bool idMultiplayerGame::HandleServerAdminCommands( serverAdminData_t &data ) {
 		nGameType = GAME_ARENA_CTF;
 	} else if ( 0 == idStr::Icmp( szGameType, "DeadZone" ) ) {
 		nGameType = GAME_DEADZONE;
-	} else {
+	} else if (0 == idStr::Icmp(szGameType, "Coop")) { //added by Stradex for COOP
+		nGameType = GAME_COOP;
+	} else if (0 == idStr::Icmp(szGameType, "Survival")) { //added by Stradex for SURVIVAL COOP
+		nGameType = GAME_SURVIVAL;
+	} {
 		nGameType = GAME_SP;
 	}
 	if ( nGameType != data.gameType ) {
@@ -7787,6 +7964,8 @@ bool idMultiplayerGame::HandleServerAdminCommands( serverAdminData_t &data ) {
 			// mekberg: hack, if we had 1f ctf the gui index wouldn't be off =(
 			case GAME_1F_CTF:		szGameType = "Arena CTF";	runPickMap = true; break;
 			case GAME_DEADZONE:		szGameType = "DeadZone";	runPickMap = true; break;
+			case GAME_COOP:			szGameType = "Coop";		runPickMap = true; break;
+			case GAME_SURVIVAL:		szGameType = "Survival";	runPickMap = true; break;
 			default:
 			case GAME_DM:			szGameType = "DM";			break;
 		}
@@ -8654,7 +8833,14 @@ void idMultiplayerGame::SetGameType( void ) {
 	} else if ( ( idStr::Icmp( gameLocal.serverInfo.GetString( "si_gameType" ), "DeadZone" ) == 0 ) ) {
 		gameLocal.gameType = GAME_DEADZONE;
 		gameState = new riDZGameState;
-	} else {
+	} else if ((idStr::Icmp(gameLocal.serverInfo.GetString("si_gameType"), "Coop") == 0)) {
+		gameLocal.gameType = GAME_COOP;
+		gameState = new riDZGameState;
+	} else if ((idStr::Icmp(gameLocal.serverInfo.GetString("si_gameType"), "Survival") == 0)) {
+		gameLocal.gameType = GAME_SURVIVAL;
+		gameState = new riDZGameState;
+	}
+	else {
 		gameLocal.Error( "idMultiplayerGame::SetGameType() - Unknown gametype '%s'\n", gameLocal.serverInfo.GetString( "si_gameType" ) );
 	}
 
@@ -9273,3 +9459,117 @@ void idMultiplayerGame::SetUpdateForTeamPowerups(int team)
 // RITUAL END
 
 
+
+//NEW COOP METHODS
+
+/*
+================
+idMultiplayerGame::IsGametypeFlagBased
+================
+*/
+bool idMultiplayerGame::IsGametypeCoopBased(void) const {
+	switch (gameLocal.gameType)
+	{
+	case GAME_SP:
+	case GAME_DM:
+	case GAME_TOURNEY:
+	case GAME_TDM:
+		return false;
+
+	case GAME_COOP:
+	case GAME_SURVIVAL:
+		return true;
+
+	default:
+		assert(!"Add support for your new gametype here.");
+	}
+
+	return false;
+
+}
+
+/*
+================
+idMultiplayerGame::CreateNewCheckpoint
+================
+*/
+void idMultiplayerGame::CreateNewCheckpoint(idVec3 pos) {
+	int i;
+	for (i = 0; i < MAX_CLIENTS; i++) {
+		playerCheckpoints[i] = pos;
+		playerUseCheckpoints[i] = true;
+	}
+
+	cmdSystem->BufferCommandText(CMD_EXEC_NOW, "say The server created a new global checkpoint!\n");
+}
+
+
+/*
+================
+idMultiplayerGame::WantAddCheckpoint
+================
+*/
+void idMultiplayerGame::WantAddCheckpoint(int clientNum, bool isGlobal) {
+	idEntity* ent = gameLocal.entities[clientNum];
+	idPlayer* p;
+	idVec3 pPos;
+	if (ent && ent->IsType(idPlayer::GetClassType())) {
+		p = static_cast<idPlayer*>(ent);
+		pPos = p->GetLocalCoordinates(p->GetPhysics()->GetOrigin());
+		if (isGlobal) {
+			int i;
+			for (i = 0; i < MAX_CLIENTS; i++) {
+				playerCheckpoints[i] = pPos;
+				playerUseCheckpoints[i] = true;
+			}
+			cmdSystem->BufferCommandText(CMD_EXEC_NOW, va("say '%s^0' created a new global checkpoint!\n", gameLocal.userInfo[p->entityNumber].GetString("ui_name")));
+			//common->Printf("Player %d added a global checkpoint\n", clientNum);
+			//gameLocal.mpGame.say
+		}
+		else {
+			playerCheckpoints[clientNum] = pPos;
+			playerUseCheckpoints[clientNum] = true;
+			common->Printf("Player %d added a checkpoint\n", clientNum);
+		}
+		//static_cast<idPlayer *>( ent )->Kill( false, false );
+	}
+}
+
+/*
+================
+idMultiplayerGame::WantUseCheckpoint
+================
+*/
+void idMultiplayerGame::WantUseCheckpoint(int clientNum) {
+	idEntity* ent = gameLocal.entities[clientNum];
+	idPlayer* p;
+	if (ent && ent->IsType(idPlayer::GetClassType())) {
+		p = static_cast<idPlayer*>(ent);
+		p->Teleport(playerCheckpoints[clientNum], p->GetViewAngles());
+		common->Printf("Player %d used checkpoint\n", clientNum);
+	}
+}
+
+/*
+================
+idMultiplayerGame::WantNoClip
+================
+*/
+void idMultiplayerGame::WantNoClip(int clientNum) {
+	idEntity* ent = gameLocal.entities[clientNum];
+	if (ent && ent->IsType(idPlayer::GetClassType())) {
+		bool noClipStatus = static_cast<idPlayer*>(ent)->noclip;
+		static_cast<idPlayer*>(ent)->noclip = !noClipStatus;
+	}
+}
+
+/*
+================
+idMultiplayerGame::IncrementFrags
+================
+*/
+void idMultiplayerGame::IncrementFrags(idPlayer* player) {
+	if (player) {
+		playerState[player->entityNumber].fragCount++;
+	}
+}

@@ -721,6 +721,9 @@ rvMonsterStroggHover::Damage
 */
 void rvMonsterStroggHover::Damage( idEntity *inflictor, idEntity *attacker, const idVec3 &dir, 
 								  const char *damageDefName, const float damageScale, const int location ) {
+	if (gameLocal.isClient && gameLocal.mpGame.IsGametypeCoopBased()) { //Disallow clientside damage in coop by now.
+		return;
+	}
 	if ( attacker == this ) {
 		return;
 	}

@@ -475,6 +475,7 @@ public:
 	virtual void			ProjectHeadOverlay( const idVec3 &point, const idVec3 &dir, float size, const char *decal );
  							// use exitEntityNum to specify a teleport with private camera view and delayed exit
  	virtual void			Teleport( const idVec3 &origin, const idAngles &angles, idEntity *destination );
+	virtual void			Teleport(const idVec3& origin, const idAngles& angles); //For coop only
 
 	virtual void			GetDebugInfo ( debugInfoProc_t proc, void* userData );
 
@@ -693,6 +694,8 @@ public:
 	void					UpdateSounds(const rvDeclPlayerModel *modelDecl);
 
 	bool					OnLadder( void ) const;
+
+	idAngles				GetViewAngles(void); //added for coop checkpoint teleport
 
 	rvViewWeapon*			GetWeaponViewModel	( void ) const;
 	idAnimatedEntity*		GetWeaponWorldModel ( void ) const;

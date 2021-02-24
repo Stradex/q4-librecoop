@@ -33,6 +33,8 @@ typedef enum {
 // RITUAL BEGIN
 // squirrel: added DeadZone multiplayer mode
 	GAME_DEADZONE,
+	GAME_COOP, //added by Stradex for Coop
+	GAME_SURVIVAL, //added by Stradex for Coop
 	NUM_GAME_TYPES,
 // RITUAL END
 } gameType_t;
@@ -203,6 +205,7 @@ typedef struct mpPlayerState_s {
 	int				ping;			// player ping
 	int				fragCount;		// kills
 	int				teamFragCount;	// teamplay awards
+	int				livesLeft;		// SURVIVAL: Lives reamaining
 	int				deadZoneScore;  // Score in dead zone
 	int				wins;
 	playerVote_t	vote;			// player's vote
@@ -221,6 +224,7 @@ const int MP_PLAYER_MINFRAGS = -100;
 const int MP_PLAYER_MAXFRAGS = 999;
 const int MP_PLAYER_MAXWINS	= 100;
 const int MP_PLAYER_MAXPING	= 999;
+const int MP_PLAYER_MAXLIVES = 100;
 
 const int MP_PLAYER_MAXKILLS = 999;
 const int MP_PLAYER_MAXDEATHS = 999;
@@ -243,6 +247,8 @@ const int ASYNC_PLAYER_PING_BITS = idMath::BitsForInteger( MP_PLAYER_MAXPING );
 const int ASYNC_PLAYER_INSTANCE_BITS = idMath::BitsForInteger( MAX_INSTANCES );
 const int ASYNC_PLAYER_DEATH_BITS = idMath::BitsForInteger( MP_PLAYER_MAXDEATHS );
 const int ASYNC_PLAYER_KILL_BITS = idMath::BitsForInteger( MP_PLAYER_MAXKILLS );
+const int ASYNC_PLAYER_LIVES_BITS = idMath::BitsForInteger(MP_PLAYER_MAXLIVES);
+
 //RAVEN END
 //RITUAL BEGIN
 const int MAX_TEAM_POWERUPS = 5;
@@ -528,6 +534,17 @@ public:
 	void			ServerClientConnect( int clientNum );
 
 	void			PlayerStats( int clientNum, char *data, const int len );
+
+	//specific coop functions
+	void			CreateNewCheckpoint(idVec3 pos);
+	void			WantUseCheckpoint(int clientNum);
+	void			WantAddCheckpoint(int clientNum, bool isGlobal = false);
+	void			WantNoClip(int clientNum);
+	void			IncrementFrags(idPlayer* player);
+	//void			SavePersistentPlayersInfo(void);
+
+	idVec3			playerCheckpoints[MAX_CLIENTS]; //added for coop checkpoints
+	bool			playerUseCheckpoints[MAX_CLIENTS]; //added for coop checkpoints
 
 	void			AddTeamScore ( int team, int amount );
 	void			AddPlayerScore( idPlayer* player, int amount );
@@ -843,6 +860,11 @@ private:
 	void			SetMapShot( void );
 	// scores in TDM
 	void			VoiceChat( const idCmdArgs &args, bool team );
+
+public:
+	//idStr			GetBestGametype(const char* map, const char* gametype); //Added for COOP mod by Stradex
+	//void			SetBestGametype(const char* map); //Added for COOP mod by Stradex
+	bool            IsGametypeCoopBased(void) const; //Added for COOP mod by Stradex
 
 // RAVEN BEGIN
 // mekberg: added

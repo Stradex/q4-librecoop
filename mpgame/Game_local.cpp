@@ -7234,6 +7234,21 @@ void idGameLocal::InitializeSpawns( void ) {
 		spot = FindEntityUsingDef( spot, "info_player_deathmatch" );
 	}
 
+	//COOP ADDED
+	if (gameLocal.mpGame.IsGametypeCoopBased()) {
+		spot = FindEntityUsingDef(NULL, "info_player_start");
+		while (spot) {
+			// RAVEN BEGIN
+			// jnewquist: Use accessor for static class type 
+			if (spot->IsType(idPlayerStart::GetClassType())) {
+				// RAVEN END
+				spawnSpots.Append(static_cast<idPlayerStart*>(spot));
+			}
+			spot = FindEntityUsingDef(spot, "info_player_start");
+		}
+	}
+	//COOP END
+
 	while( spot ) {
 		// RAVEN BEGIN
 		// jnewquist: Use accessor for static class type 
@@ -7335,7 +7350,7 @@ idEntity* idGameLocal::SelectSpawnPoint( idPlayer* player ) {
 	// Pick which spawns to use based on gametype
 // RITUAL BEGIN
 // squirrel: added DeadZone multiplayer mode
-	if( gameLocal.gameType == GAME_DM || gameLocal.gameType == GAME_TDM || gameLocal.gameType == GAME_TOURNEY ) {
+	if( gameLocal.gameType == GAME_DM || gameLocal.gameType == GAME_TDM || gameLocal.gameType == GAME_TOURNEY ||  gameLocal.mpGame.IsGametypeCoopBased()) {
 		spawnArray = &spawnSpots;
 	} 
 	else if( IsFlagGameType() || gameLocal.gameType == GAME_DEADZONE ) {	

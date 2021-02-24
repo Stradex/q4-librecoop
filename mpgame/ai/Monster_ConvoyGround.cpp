@@ -243,6 +243,9 @@ void rvMonsterConvoyGround::AdjustHealthByDamage ( int damage ) {
 
 void rvMonsterConvoyGround::Damage ( idEntity *inflictor, idEntity *attacker, const idVec3 &dir, const char *damageDefName, const float damageScale, const int location )
 {
+	if (gameLocal.isClient && gameLocal.mpGame.IsGametypeCoopBased()) { //Disallow clientside damage in coop by now.
+		return;
+	}
 	vehicleCollision = false;
 	const idDict *damageDef = gameLocal.FindEntityDefDict( damageDefName, false );
 	if ( damageDef && damageDef->GetBool( "vehicle_collision" ) ) {

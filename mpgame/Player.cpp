@@ -14154,3 +14154,57 @@ bool idPlayer::IsSpectatedClient( void ) const {
 	}
 	return false;
 }
+
+
+/**************
+* COOP SPECIFIC
+***************/
+
+/*
+================
+idPlayer::GetViewAngles
+================
+*/
+idAngles idPlayer::GetViewAngles(void) {
+	return viewAngles;
+}
+
+/*
+===========
+idPlayer::Teleport
+============
+*/
+void idPlayer::Teleport(const idVec3& origin, const idAngles& angles) {
+	idVec3 org;
+
+	if (weapon) {
+		weapon->LowerWeapon();
+	}
+
+	if (!spectating) {
+		SetOrigin(origin + idVec3(0, 0, CM_CLIP_EPSILON));
+	}
+	else {
+		SetOrigin(origin + idVec3(0, 0, CM_CLIP_EPSILON) + idVec3(0, 0, SPECTATE_RAISE));
+	}
+	if (!gameLocal.isMultiplayer && GetFloorPos(16.0f, org)) {
+		SetOrigin(org);
+	}
+
+	// clear the ik heights so model doesn't appear in the wrong place
+	walkIK.EnableAll();
+
+	GetPhysics()->SetLinearVelocity(vec3_origin);
+
+	SetViewAngles(angles);
+
+	legsYaw = 0.0f;
+	idealLegsYaw = 0.0f;
+	oldViewYaw = viewAngles.yaw;
+
+	if (gameLocal.isMultiplayer) {
+		playerView.Flash(colorWhite, 140);
+	}
+
+	UpdateVisuals();
+}
