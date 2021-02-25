@@ -1332,7 +1332,7 @@ void idAI::UpdateFocus ( const idMat3& orientationAxis ) {
 			}
 		} else if ( aifl.lookAtPlayer && !move.fl.moving ) {
 			newfocus  = AIFOCUS_PLAYER;
-			lookat	  = gameLocal.GetLocalPlayer();
+			lookat	  = gameLocal.GetCoopPlayer();
 		}
 		
 		if ( newfocus != AIFOCUS_NONE && lookat ) {
@@ -1377,7 +1377,7 @@ void idAI::UpdateFocus ( const idMat3& orientationAxis ) {
 		idEntity* focusEnt = NULL;
 		switch ( focusType ) {
 			case AIFOCUS_LEADER:		focusEnt = leader;						break;
-			case AIFOCUS_PLAYER:		focusEnt = gameLocal.GetLocalPlayer();	break;
+			case AIFOCUS_PLAYER:		focusEnt = gameLocal.GetCoopPlayer();	break;
 			case AIFOCUS_TALK:			focusEnt = talkTarget;					break;
 			case AIFOCUS_TARGET:		focusEnt = lookTarget;					break;
 		}
@@ -1838,7 +1838,12 @@ void idAI::Activate( idEntity *activator ) {
 
 	aifl.activated = true;
 	if ( !activator || !activator->IsType( idPlayer::GetClassType() ) ) {
-		player = gameLocal.GetLocalPlayer();
+		if (gameLocal.mpGame.IsGametypeCoopBased()) {
+			player = GetClosestPlayer();
+		}
+		else {
+			player = gameLocal.GetLocalPlayer();
+		}
 	} else {
 		player = static_cast<idPlayer *>( activator );
 	}
@@ -2583,7 +2588,7 @@ idProjectile* idAI::AttackRanged (
 
 	// set aiming direction
 	bool calcAim = true;
-	if ( GetEnemy() && GetEnemy() == target && GetEnemy() == gameLocal.GetLocalPlayer() && spawnArgs.GetBool( va("attack_%s_missFirstShot",attackName) ) ) {
+	if ( GetEnemy() && GetEnemy() == target && GetEnemy()->IsType(idPlayer::GetClassType()) && spawnArgs.GetBool( va("attack_%s_missFirstShot",attackName) ) ) {
 		//purposely miss
 		if ( gameLocal.random.RandomFloat() < 0.5f ) {
 			//actually, hit anyway...
@@ -2914,7 +2919,7 @@ bool idAI::AttackMelee ( const char *attackName, const idDict* meleeDict ) {
 	enemyEnt->Damage( this, this, globalKickDir, meleeDict->GetString ( "classname" ), damageScale, location );
 
 	if ( meleeDict->GetString( "fx_impact", NULL ) ) {
-		if ( enemyEnt == gameLocal.GetLocalPlayer() ) {
+		if ( enemyEnt->IsType(idPlayer::GetClassType())) {
 			idPlayer *ePlayer = static_cast<idPlayer*>(enemyEnt);
 			if ( ePlayer ) {
 				idVec3 dir = ePlayer->firstPersonViewOrigin-GetEyePosition();

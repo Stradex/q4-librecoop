@@ -410,6 +410,10 @@ void idGameLocal::Clear( void ) {
 		networkSystem->UseSortFunction( filterByMod, false );
 	}
 	clientAckSequence = -1;
+
+	//Invasion gamemode spawners
+	nextSpawnTime = INVASION_SPAWN_DELAY;
+	invasionEnemies.Clear();
 }
 
 /*
@@ -605,6 +609,7 @@ void idGameLocal::Init( void ) {
 	networkSystem->AddSortFunction( filterByMod );
 
 	incompatibleMaps = 0;
+
 }
 
 /*
@@ -689,6 +694,10 @@ void idGameLocal::Shutdown( void ) {
 	shakeSounds.Clear();
 	aiManager.Clear();
 // RAVEN END
+
+	//Invasion start
+	invasionEnemies.Clear();
+	//Invasion end
 
 	ShutdownConsoleCommands();
 
@@ -2010,6 +2019,18 @@ void idGameLocal::MapPopulate( int instance ) {
 	InitializeSpawns();
 	// RAVEN END
 
+	if (isServer) {
+		invasionEnemies.Clear();
+		invasionEnemies.Append("monster_strogg_marine");
+		invasionEnemies.Append("monster_berserker");
+		invasionEnemies.Append("monster_iron_maiden");
+		invasionEnemies.Append("monster_tactical_blaster");
+		invasionEnemies.Append("monster_grunt");
+		invasionEnemies.Append("monster_gunner");
+		invasionEnemies.Append("monster_gladiator");
+		invasionEnemies.Append("monster_scientist");
+	}
+
 	// execute pending events before the very first game frame
 	// this makes sure the map script main() function is called
 	// before the physics are run so entities can bind correctly
@@ -3235,7 +3256,7 @@ be correct for single player.
 */
 idPlayer* idGameLocal::GetCoopPlayer() const {
 
-	if (isServer) {
+	if (isServer && mpGame.IsGametypeCoopBased()) {
 		if (localClientNum < 0 || !entities[localClientNum] || !entities[localClientNum]->IsType(idPlayer::GetClassType())) {
 
 			idPlayer* p = NULL;
@@ -3695,6 +3716,7 @@ gameReturn_t idGameLocal::RunFrame( const usercmd_t *clientCmds, int activeEdito
 	gameReturn_t ret;
 	idPlayer	*player;
 	const renderView_t *view;
+	idDict		invSpawnArgs; //invasion gamemode 
 
 	editors = activeEditors;
 	isLastPredictFrame = lastCatchupFrame;
@@ -3761,7 +3783,7 @@ TIME_THIS_SCOPE("idGameLocal::RunFrame - gameDebug.BeginFrame()");
 		common->RunAlwaysThinkGUIs( time );
 
 		// nmckenzie: Let AI System stuff update itself.
-		if ( !isMultiplayer ) {
+		if ( !isMultiplayer || mpGame.IsGametypeCoopBased()) {
 #ifndef _MPBETA
 			aiManager.RunFrame();
 #endif // !_MPBETA
@@ -3874,6 +3896,18 @@ TIME_THIS_SCOPE("idGameLocal::RunFrame - gameDebug.BeginFrame()");
 					num++;
 				}
 			}
+		}
+
+		if (mpGame.IsGametypeCoopBased() && isServer && time >= nextSpawnTime && mpGame.NumActualClients(false) > 0 && InvasionEnemiesCount() <= INVASION_MAX_ALIVE ) {
+			// SPAWN INVASION ENTITIES
+			idVec3		org = spawnSpots[random.RandomInt(spawnSpots.Num())]->GetPhysics()->GetOrigin() + idVec3(0, 0, 1);
+			invSpawnArgs.Clear();
+			invSpawnArgs.Set("classname", invasionEnemies[random.RandomInt(invasionEnemies.Num())].c_str());
+			invSpawnArgs.Set("origin", org.ToString());
+			invSpawnArgs.Set("invasionEntity", "1");
+
+			gameLocal.SpawnEntityDef(invSpawnArgs);
+			nextSpawnTime = time + INVASION_SPAWN_DELAY;
 		}
 
 		// remove any entities that have stopped thinking
@@ -8658,6 +8692,24 @@ bool idGameLocal::IsTeamPowerups( void ) {
 		return false;
 	}
 	return ( gameType != GAME_ARENA_CTF );
+}
+
+//COOP SPECIFIC
+
+/*
+===============
+idGameLocal::InvasionEnemiesCount
+===============
+*/
+int	idGameLocal::InvasionEnemiesCount(void) {
+	int i, c;
+	c = 0;
+	for (i = MAX_CLIENTS; i < ENTITYNUM_MAX_NORMAL; i++) {
+		if (entities[i] && entities[i]->invasionEntity) {
+			c++;
+		}
+	}
+	return c;
 }
 
 // RAVEN BEGIN

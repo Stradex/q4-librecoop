@@ -86,6 +86,12 @@ class idLocationEntity;
 #define SAFE_REMOVE(p) if(p) { (p)->PostEventMS(&EV_Remove, 0); (p) = NULL; }
 // RAVEN END
 
+//COOP INVASION TEST START
+#define INVASION_MAX_SPAWNPOINTS	256
+#define INVASION_MAX_ALIVE			11
+#define INVASION_SPAWN_DELAY		10000	//delay to spawn
+//COOP INVASION TEST END
+
 //============================================================================
 
 void gameError( const char *fmt, ... );
@@ -425,6 +431,7 @@ public:
 	bool					sortPushers;			// true if active lists needs to be reordered to place pushers at the front
 	bool					sortTeamMasters;		// true if active lists needs to be reordered to place physics team masters before their slaves
 	idDict					persistentLevelInfo;	// contains args that are kept around between levels
+	int						nextSpawnTime;			// Used in invasion gamemode (test only in DM maps)
 
 // RAVEN BEGIN
 // bdube: client entities
@@ -608,11 +615,6 @@ public:
 
 	virtual bool			HTTPRequest( const char *IP, const char *file, bool isGamePak );
 
-	//COOP START
-	virtual void			ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, dword* clientInPVS, int numPVSClients, int lastSnapshotFrame);
-	virtual void			ClientReadSnapshotCoop(int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg);
-	//COOP END
-
 // RAVEN BEGIN
 // bdube: client hitscan
 	virtual void			ClientHitScan( const idBitMsg &msg );
@@ -684,6 +686,11 @@ public:
 	virtual void			SetupLoadingGui( idUserInterface *gui ) {}
 
 	// ---------------------- Public idGameLocal Interface -------------------
+
+	//COOP START
+	void					ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, dword* clientInPVS, int numPVSClients, int lastSnapshotFrame);
+	void					ClientReadSnapshotCoop(int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg);
+	//COOP END
 
 	void					Printf( const char *fmt, ... ) const;
 	void					DPrintf( const char *fmt, ... ) const;
@@ -950,6 +957,7 @@ public:
 	bool					IsFlagGameType( void ) { return ( gameType == GAME_CTF || gameType == GAME_1F_CTF || gameType == GAME_ARENA_CTF || gameType == GAME_ARENA_1F_CTF ); }
 	bool					IsTeamGameType( void ) { return ( gameType == GAME_TDM || gameType == GAME_CTF || gameType == GAME_ARENA_CTF || gameType == GAME_DEADZONE ); }
 	bool					IsTeamPowerups( void );
+	int						InvasionEnemiesCount(void);
 
 	// twhitaker: needed this for difficulty settings
 	float					GetDifficultyModifier( void ) { const static float difficulty[] = { -0.3f, 0.0f, 0.4f, 0.8f }; return difficulty[ idMath::ClampInt( 0, 3, g_skill.GetInteger() ) ]; }
@@ -1103,6 +1111,7 @@ private:
 	idDict					newInfo;
 
 	idStrList				shakeSounds;
+	idStrList				invasionEnemies;
 
 	idMsgQueue				unreliableMessages[ MAX_CLIENTS+1 ];	// MAX_CLIENTS slot for server demo recording
 

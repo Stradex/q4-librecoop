@@ -524,11 +524,6 @@ public:
 
 	virtual bool			HTTPRequest( const char *IP, const char *file, bool isGamePak );
 
-	//COOP START
-	virtual void			ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, dword* clientInPVS, int numPVSClients, int lastSnapshotFrame);
-	virtual void			ClientReadSnapshotCoop(int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg);
-	//COOP END
-
 // RAVEN BEGIN
 // bdube: client hitscan
 	virtual void			ClientHitScan( const idBitMsg &msg );

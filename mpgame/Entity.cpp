@@ -488,6 +488,7 @@ idEntity::idEntity() {
 	thinkFlags		= 0;
 	dormantStart	= 0;
 	cinematic		= false;
+	invasionEntity  = false;
 	renderView		= NULL;
 	cameraTarget	= NULL;
 	health			= 0;
@@ -619,6 +620,8 @@ void idEntity::Spawn( void ) {
 // bdube: usable
 	fl.usable = spawnArgs.GetBool ( "usable", "0" );
 // RAVEN END
+
+	invasionEntity = spawnArgs.GetBool("invasionEntity", "0");
 
 	fl.neverDormant = spawnArgs.GetBool( "neverDormant", "0" );
 	fl.hidden = spawnArgs.GetBool( "hide", "0" );
