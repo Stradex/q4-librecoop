@@ -281,9 +281,9 @@ public:
 	virtual bool				HTTPRequest( const char *IP, const char *file, bool isGamePak ) = 0;
 
 	//STRADEX START
-	//virtual void				ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, byte* clientInPVS, int numPVSClients) = 0;
+	virtual void				ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, dword* clientInPVS, int numPVSClients, int lastSnapshotFrame) = 0;
 
-	//virtual void				ClientReadSnapshotCoop(int clientNum, int sequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg) = 0;
+	virtual void				ClientReadSnapshotCoop(int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg) = 0;
 	//STRADEX END
 
 // RAVEN BEGIN

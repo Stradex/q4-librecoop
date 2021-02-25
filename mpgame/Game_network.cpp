@@ -989,6 +989,11 @@ Write a snapshot of the current game state for the given client.
 */
 void idGameLocal::ServerWriteSnapshot( int clientNum, int sequence, idBitMsg &msg, dword *clientInPVS, int numPVSClients, int lastSnapshotFrame ) {
 
+	if (mpGame.IsGametypeCoopBased()) { //added for COOP
+		return ServerWriteSnapshotCoop(clientNum, sequence, msg, clientInPVS, numPVSClients, lastSnapshotFrame);
+	}
+
+
 	int i;
 	idPlayer *player, *spectated = NULL;
 
@@ -1542,6 +1547,11 @@ idGameLocal::ReadSnapshot
 ================
 */
 void idGameLocal::ClientReadSnapshot( int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg &msg ) {
+
+	if (mpGame.IsGametypeCoopBased()) { //Extra for coop
+		return ClientReadSnapshotCoop(clientNum, snapshotSequence, gameFrame, gameTime, dupeUsercmds, aheadOfServer, msg); //specific coop method for this to avoid breaking original D3 Netcode
+	}
+
 	int						i, entityDefNumber, numBitsRead;
 	idEntity				*ent;
 	idPlayer				*player, *spectated;
@@ -4014,4 +4024,425 @@ idGameLocal::RandomSpawn
 */
 idPlayerStart *idGameLocal::RandomSpawn( void ) {
 	return spawnSpots[ random.RandomInt( spawnSpots.Num() ) ];
+}
+
+/**************
+* COOP SPECIFIC
+***************/
+
+/*
+===============
+idGameLocal::ServerWriteSnapshotCoop
+===============
+*/
+
+void idGameLocal::ServerWriteSnapshotCoop(int clientNum, int sequence, idBitMsg& msg, dword* clientInPVS, int numPVSClients, int lastSnapshotFrame) {
+	int i;
+	idPlayer* player, * spectated = NULL;
+
+	player = static_cast<idPlayer*>(entities[clientNum]);
+	assert(player);
+
+	if (player->spectating && player->spectator != clientNum && entities[player->spectator]) {
+		spectated = static_cast<idPlayer*>(entities[player->spectator]);
+	}
+	else {
+		spectated = player;
+	}
+
+	WriteSnapshot(
+		clientSnapshots[clientNum],
+		clientEntityStates[clientNum],
+		clientPVS[clientNum],
+		unreliableMessages[clientNum],
+		sequence,
+		msg,
+		spectated->entityNumber,
+		clientNum,
+		player->GetInstance(),
+		true,
+		spectated->GetPlayerPhysics()->GetAbsBounds(),
+		lastSnapshotFrame
+	);
+
+	unreliableMessages[clientNum].Init(0);
+
+	// copy the client PVS string
+	// RAVEN BEGIN
+	const int numDwords = (numPVSClients + 31) >> 5;
+	for (i = 0; i < numDwords; i++) {
+		clientInPVS[i] = clientSnapshots[clientNum]->pvs[i];
+	}
+	// RAVEN END
+}
+
+/*
+===============
+idGameLocal::ClientReadSnapshotCoop
+===============
+*/
+void idGameLocal::ClientReadSnapshotCoop(int clientNum, int snapshotSequence, const int gameFrame, const int gameTime, const int dupeUsercmds, const int aheadOfServer, const idBitMsg& msg) {
+
+	int						i, entityDefNumber, numBitsRead;
+	idEntity* ent;
+	idPlayer* player, * spectated;
+	pvsHandle_t				pvsHandle;
+	idDict					args;
+	idBitMsgDelta			deltaMsg;
+	snapshot_t* snapshot;
+	entityState_t* base, * newBase;
+	int						spawnId;
+	int						numSourceAreas, sourceAreas[idEntity::MAX_PVS_AREAS];
+
+	const idDeclEntityDef* decl;
+
+	if (net_clientLagOMeter.GetBool() && renderSystem && !(GetDemoState() == DEMO_PLAYING && (IsServerDemoPlaying() || IsTimeDemo()))) {
+		lagometer.Update(aheadOfServer, dupeUsercmds);
+	}
+
+	InitLocalClient(clientNum);
+
+	gameRenderWorld->DebugClear(time);
+
+	// update the game time
+	framenum = gameFrame;
+	time = gameTime;
+	previousTime = time - GetMSec();
+
+	isNewFrame = true;
+
+	// clear the snapshot entity list
+	snapshotEntities.Clear();
+
+	// allocate new snapshot
+	snapshot = snapshotAllocator.Alloc();
+	snapshot->sequence = snapshotSequence;
+	snapshot->firstEntityState = NULL;
+	snapshot->next = clientSnapshots[clientNum];
+	clientSnapshots[clientNum] = snapshot;
+
+#if ASYNC_WRITE_TAGS
+	idRandom tagRandom;
+	tagRandom.SetSeed(msg.ReadLong());
+#endif
+
+	ClientReadUnreliableMessages(msg);
+
+#if ASYNC_WRITE_TAGS
+	if (msg.ReadLong() != tagRandom.RandomInt()) {
+		Error("error after read unreliable");
+	}
+#endif
+
+	// read all entities from the snapshot
+	for (i = msg.ReadBits(GENTITYNUM_BITS); i != ENTITYNUM_NONE; i = msg.ReadBits(GENTITYNUM_BITS)) {
+		base = clientEntityStates[clientNum][i];
+		if (base) {
+			base->state.BeginReading();
+		}
+		newBase = entityStateAllocator.Alloc();
+		newBase->entityNumber = i;
+		newBase->next = snapshot->firstEntityState;
+		snapshot->firstEntityState = newBase;
+		newBase->state.Init(newBase->stateBuf, sizeof(newBase->stateBuf));
+		newBase->state.BeginWriting();
+
+		numBitsRead = msg.GetNumBitsRead();
+
+		deltaMsg.InitReading(base ? &base->state : NULL, &newBase->state, &msg);
+
+		spawnId = deltaMsg.ReadBits(32 - GENTITYNUM_BITS);
+		entityDefNumber = deltaMsg.ReadBits(entityDefBits);
+
+		ent = entities[i];
+
+		// if there is no entity or an entity of the wrong type
+		if (!ent || ent->entityDefNumber != entityDefNumber || spawnId != spawnIds[i]) {
+
+			if (i < MAX_CLIENTS && ent) {
+				// SPAWN_PLAYER should be taking care of spawning the entity with the right spawnId
+				common->Warning("ClientReadSnapshot: recycling client entity %d\n", i);
+			}
+
+			delete ent;
+
+			spawnCount = spawnId;
+
+			args.Clear();
+			args.SetInt("spawn_entnum", i);
+			args.Set("name", va("entity%d", i));
+
+			// assume any items spawned from a server-snapshot are in our instance
+			if (gameLocal.GetLocalPlayer()) {
+				args.SetInt("instance", gameLocal.GetLocalPlayer()->GetInstance());
+			}
+
+			assert(entityDefNumber >= 0);
+			if (entityDefNumber >= declManager->GetNumDecls(DECL_ENTITYDEF)) {
+				Error("server has %d entityDefs instead of %d", entityDefNumber, declManager->GetNumDecls(DECL_ENTITYDEF));
+			}
+			decl = static_cast<const idDeclEntityDef*>(declManager->DeclByIndex(DECL_ENTITYDEF, entityDefNumber, false));
+			assert(decl && decl->GetType() == DECL_ENTITYDEF);
+			args.Set("classname", decl->GetName());
+			if (!SpawnEntityDef(args, &ent) || !entities[i]) {
+				Error("Failed to spawn entity with classname '%s' of type '%s'", decl->GetName(), decl->dict.GetString("spawnclass"));
+			}
+
+			if (i < MAX_CLIENTS && i >= numClients) {
+				numClients = i + 1;
+			}
+		}
+
+		// add the entity to the snapshot list
+		ent->snapshotNode.AddToEnd(snapshotEntities);
+		ent->snapshotSequence = snapshotSequence;
+
+		// RAVEN BEGIN
+		// bdube: stale network entities
+				// Ensure the clipmodel is relinked when transitioning from state
+		if (ent->fl.networkStale) {
+			ent->GetPhysics()->LinkClip();
+		}
+		// RAVEN END
+
+				// read the class specific data from the snapshot
+		ent->ReadFromSnapshot(deltaMsg);
+
+		// read the player state from player entities
+		if (ent->entityNumber < MAX_CLIENTS) {
+			if (deltaMsg.ReadBits(1) == 1) {
+				assert(ent->IsType(idPlayer::GetClassType()));
+				static_cast<idPlayer*>(ent)->ReadPlayerStateFromSnapshot(deltaMsg);
+			}
+		}
+
+		// once we read new snapshot data, unstale the ent
+		if (ent->fl.networkStale) {
+			ent->ClientUnstale();
+			ent->fl.networkStale = false;
+		}
+		ent->snapshotBits = msg.GetNumBitsRead() - numBitsRead;
+
+#if ASYNC_WRITE_TAGS
+		if (msg.ReadLong() != tagRandom.RandomInt()) {
+			//cmdSystem->BufferCommandText( CMD_EXEC_NOW, "writeGameState" );
+			assert(entityDefNumber >= 0);
+			assert(entityDefNumber < declManager->GetNumDecls(DECL_ENTITYDEF));
+			const char* classname = declManager->DeclByIndex(DECL_ENTITYDEF, entityDefNumber, false)->GetName();
+			Error("write to and read from snapshot out of sync for classname '%s'\n", classname);
+		}
+#endif
+	}
+
+	if (clientNum < MAX_CLIENTS) {
+		player = static_cast<idPlayer*>(entities[clientNum]);
+	}
+	else {
+		player = gameLocal.GetLocalPlayer();
+	}
+
+	if (player->spectating && player->spectator != clientNum && entities[player->spectator]) {
+		spectated = static_cast<idPlayer*>(entities[player->spectator]);
+	}
+	else {
+		spectated = player;
+	}
+
+	if (spectated) {
+		// get PVS for this player
+		// don't use PVSAreas for networking - PVSAreas depends on animations (and md5 bounds), which are not synchronized
+		numSourceAreas = gameRenderWorld->BoundsInAreas(spectated->GetPlayerPhysics()->GetAbsBounds(), sourceAreas, idEntity::MAX_PVS_AREAS);
+		pvsHandle = gameLocal.pvs.SetupCurrentPVS(sourceAreas, numSourceAreas, PVS_NORMAL);
+	}
+	else {
+		gameLocal.Printf("Client hasn't spawned self yet.\n");
+		numSourceAreas = gameRenderWorld->BoundsInAreas(idBounds(vec3_origin), sourceAreas, idEntity::MAX_PVS_AREAS);
+		pvsHandle = gameLocal.pvs.SetupCurrentPVS(sourceAreas, numSourceAreas, PVS_NORMAL);
+	}
+
+	// read the PVS from the snapshot
+#if ASYNC_WRITE_PVS
+// zinx - FIXME - this isn't written for server demos or for non-PVS'd repeaters, so we shouldn't read it.
+	int serverPVS[idEntity::MAX_PVS_AREAS];
+	i = numSourceAreas;
+	while (i < idEntity::MAX_PVS_AREAS) {
+		sourceAreas[i++] = 0;
+	}
+	for (i = 0; i < idEntity::MAX_PVS_AREAS; i++) {
+		serverPVS[i] = msg.ReadLong();
+	}
+	if (memcmp(sourceAreas, serverPVS, idEntity::MAX_PVS_AREAS * sizeof(int))) {
+		common->Warning("client PVS areas != server PVS areas, sequence 0x%x", snapshotSequence);
+		for (i = 0; i < idEntity::MAX_PVS_AREAS; i++) {
+			common->DPrintf("%3d ", sourceAreas[i]);
+		}
+		common->DPrintf("\n");
+		for (i = 0; i < idEntity::MAX_PVS_AREAS; i++) {
+			common->DPrintf("%3d ", serverPVS[i]);
+		}
+		common->DPrintf("\n");
+	}
+	gameLocal.pvs.ReadPVS(pvsHandle, msg);
+#endif
+	for (i = 0; i < ENTITY_PVS_SIZE; i++) {
+		snapshot->pvs[i] = msg.ReadDeltaLong(clientPVS[clientNum][i]);
+	}
+	// RAVEN BEGIN
+	// ddynerman: performance profiling
+	net_entsInSnapshot += snapshotEntities.Num();
+	net_snapshotSize += msg.GetSize();
+	// RAVEN END
+		// add entities in the PVS that haven't changed since the last applied snapshot
+	idEntity* nextSpawnedEnt;
+	for (ent = spawnedEntities.Next(); ent != NULL; ent = nextSpawnedEnt) {
+		nextSpawnedEnt = ent->spawnNode.Next();
+
+		// local fake client
+		if (ent->entityNumber == ENTITYNUM_NONE) {
+			continue;
+		}
+
+		// if the entity is already in the snapshot
+		if (ent->snapshotSequence == snapshotSequence) {
+			continue;
+		}
+
+		// if the entity is not in the snapshot PVS
+		if (!(snapshot->pvs[ent->entityNumber >> 5] & (1 << (ent->entityNumber & 31)))) {
+
+			if (!ent->fl.networkSync) {
+				// don't do stale / unstale on entities that are not marked network sync
+				continue;
+			}
+
+			if (ent->PhysicsTeamInPVS(pvsHandle)) {
+				if (ent->entityNumber >= MAX_CLIENTS && isMapEntity[ent->entityNumber]) {
+					// server says it's not in PVS, client says it's in PVS
+					// if that happens on map entities, most likely something is wrong
+					// I can see that moving pieces along several PVS could be a legit situation though
+					// this is a band aid, which means something is not done right elsewhere
+					if (net_warnStale.GetInteger() > 1 || (net_warnStale.GetInteger() == 1 && !ent->fl.networkStale)) {
+						common->Warning("client thinks map entity 0x%x (%s) is stale, sequence 0x%x", ent->entityNumber, ent->name.c_str(), snapshotSequence);
+					}
+				}
+				// RAVEN BEGIN
+				// bdube: hide while not in snapshot
+				if (!ent->fl.networkStale) {
+					if (ent->ClientStale()) {
+						delete ent;
+						ent = NULL;
+					}
+					else {
+						ent->fl.networkStale = true;
+					}
+				}
+
+			}
+			else {
+				if (!ent->fl.networkStale) {
+					if (ent->ClientStale()) {
+						delete ent;
+						ent = NULL;
+					}
+					else {
+						ent->fl.networkStale = true;
+					}
+				}
+			}
+			// RAVEN END
+
+			continue;
+		}
+
+		// add the entity to the snapshot list
+		ent->snapshotNode.AddToEnd(snapshotEntities);
+		ent->snapshotSequence = snapshotSequence;
+		ent->snapshotBits = 0;
+
+		// RAVEN BEGIN
+		// bdube: hide while not in snapshot
+				// Ensure the clipmodel is relinked when transitioning from state
+		if (ent->fl.networkStale) {
+			ent->GetPhysics()->LinkClip();
+		}
+		// RAVEN END
+
+		base = clientEntityStates[clientNum][ent->entityNumber];
+		if (!base) {
+			// entity has probably fl.networkSync set to false
+			// non netsynced map entities go in and out of PVS, and may need stale/unstale calls
+			if (ent->fl.networkStale) {
+				ent->ClientUnstale();
+				ent->fl.networkStale = false;
+			}
+			continue;
+		}
+
+		if (!ent->fl.networkSync) {
+			// this is not supposed to happen
+			// it did however, when restarting a map with a different inhibit of entities caused entity numbers to be laid differently
+			// an idLight would occupy the entity number of an idItem for instance, and although it's not network-synced ( static level light ),
+			// the presence of a base would cause the system to think that it is and corrupt things
+			// we changed the map population so the entity numbers are kept the same no matter how things are inhibited
+			// this code is left as a fall-through fixup / sanity type of thing
+			// if this still happens, it's likely "client thinks map entity is stale" is happening as well, and we're still at risk of corruption
+			Warning("ClientReadSnapshot: entity %d of type %s is not networkSync and has a snapshot base", ent->entityNumber, ent->GetType()->classname);
+			entityStateAllocator.Free(clientEntityStates[clientNum][ent->entityNumber]);
+			clientEntityStates[clientNum][ent->entityNumber] = NULL;
+			continue;
+		}
+
+		base->state.BeginReading();
+
+		deltaMsg.InitReading(&base->state, NULL, (const idBitMsg*)NULL);
+		spawnId = deltaMsg.ReadBits(32 - GENTITYNUM_BITS);
+		entityDefNumber = deltaMsg.ReadBits(entityDefBits);
+
+		// read the class specific data from the base state
+		ent->ReadFromSnapshot(deltaMsg);
+
+		// after snapshot read, notify client of unstale
+		if (ent->fl.networkStale) {
+			ent->ClientUnstale();
+			ent->fl.networkStale = false;
+		}
+	}
+
+	// RAVEN BEGIN
+	// ddynerman: add the ambient lights to the snapshot entities
+	for (int i = 0; i < ambientLights.Num(); i++) {
+		ambientLights[i]->snapshotNode.AddToEnd(snapshotEntities);
+		ambientLights[i]->fl.networkStale = false;
+	}
+	// RAVEN END
+
+		// free the PVS
+	pvs.FreeCurrentPVS(pvsHandle);
+
+	// read the game state from the snapshot
+	base = clientEntityStates[clientNum][ENTITYNUM_NONE];	// ENTITYNUM_NONE is used for the game state
+	if (base) {
+		base->state.BeginReading();
+	}
+	newBase = entityStateAllocator.Alloc();
+	newBase->entityNumber = ENTITYNUM_NONE;
+	newBase->next = snapshot->firstEntityState;
+	snapshot->firstEntityState = newBase;
+	newBase->state.Init(newBase->stateBuf, sizeof(newBase->stateBuf));
+	newBase->state.BeginWriting();
+	deltaMsg.InitReading(base ? &base->state : NULL, &newBase->state, &msg);
+
+	ReadGameStateFromSnapshot(deltaMsg);
+
+	// visualize the snapshot
+	if (clientNum < MAX_CLIENTS) {
+		ClientShowSnapshot(clientNum);
+	}
+	else {
+		// FIXME
+	}
+
+	// process entity events
+	ClientProcessEntityNetworkEventQueue();
+
 }
